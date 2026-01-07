@@ -83,6 +83,21 @@ class MCManagerPlugin(Star):
             return True
         return str(user_id) in self.admin_ids
     
+    def _check_permission(self, event: AstrMessageEvent) -> tuple[bool, str]:
+        """
+        检查用户是否有权限执行操作
+        
+        Args:
+            event: 消息事件
+            
+        Returns:
+            (是否有权限, 错误消息或空字符串)
+        """
+        user_id = event.get_sender_id()
+        if not self.is_admin(user_id):
+            return False, f"权限不足：用户 {user_id} 不在管理员列表中"
+        return True, ""
+    
     def _build_system_prompt(self) -> str:
         """构建LLM系统提示"""
         return """你是一个专业的Minecraft服务器管理助手。你可以帮助管理员管理MC服务器。
@@ -126,6 +141,9 @@ class MCManagerPlugin(Star):
             player(string): 要踢出的玩家名称
             reason(string): 踢出原因
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return player_tools.kick_player(player, reason)
     
     @filter.llm_tool(name="ban_player")
@@ -136,6 +154,9 @@ class MCManagerPlugin(Star):
             player(string): 要封禁的玩家名称
             reason(string): 封禁原因
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return player_tools.ban_player(player, reason)
     
     @filter.llm_tool(name="pardon_player")
@@ -145,6 +166,9 @@ class MCManagerPlugin(Star):
         Args:
             player(string): 要解封的玩家名称
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return player_tools.pardon_player(player)
     
     @filter.llm_tool(name="op_player")
@@ -154,6 +178,9 @@ class MCManagerPlugin(Star):
         Args:
             player(string): 要给予OP权限的玩家名称
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return player_tools.op_player(player)
     
     @filter.llm_tool(name="deop_player")
@@ -163,6 +190,9 @@ class MCManagerPlugin(Star):
         Args:
             player(string): 要移除OP权限的玩家名称
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return player_tools.deop_player(player)
     
     @filter.llm_tool(name="whitelist_add")
@@ -172,6 +202,9 @@ class MCManagerPlugin(Star):
         Args:
             player(string): 要添加到白名单的玩家名称
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return player_tools.whitelist_add(player)
     
     @filter.llm_tool(name="whitelist_remove")
@@ -181,6 +214,9 @@ class MCManagerPlugin(Star):
         Args:
             player(string): 要从白名单移除的玩家名称
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return player_tools.whitelist_remove(player)
     
     @filter.llm_tool(name="give_item")
@@ -192,6 +228,9 @@ class MCManagerPlugin(Star):
             item(string): 物品ID，如diamond、iron_sword
             count(number): 物品数量，默认1
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return game_tools.give_item(player, item, count)
     
     @filter.llm_tool(name="teleport_player")
@@ -202,6 +241,9 @@ class MCManagerPlugin(Star):
             player(string): 要传送的玩家名称
             target(string): 目标位置（坐标如"100 64 200"）或目标玩家名称
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return game_tools.teleport_player(player, target)
     
     @filter.llm_tool(name="set_gamemode")
@@ -212,6 +254,9 @@ class MCManagerPlugin(Star):
             player(string): 玩家名称
             mode(string): 游戏模式：survival/creative/adventure/spectator
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return game_tools.set_gamemode(player, mode)
     
     @filter.llm_tool(name="kill_entity")
@@ -221,6 +266,9 @@ class MCManagerPlugin(Star):
         Args:
             target(string): 目标选择器或玩家名称
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return game_tools.kill_entity(target)
     
     @filter.llm_tool(name="clear_inventory")
@@ -231,6 +279,9 @@ class MCManagerPlugin(Star):
             player(string): 玩家名称
             item(string): 可选，特定物品ID
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return game_tools.clear_inventory(player, item)
     
     @filter.llm_tool(name="set_experience")
@@ -243,11 +294,17 @@ class MCManagerPlugin(Star):
             operation(string): set或add
             unit(string): points或levels
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return game_tools.set_experience(player, amount, operation, unit)
     
     @filter.llm_tool(name="list_players")
     async def tool_list_players(self, event: AstrMessageEvent) -> str:
         """获取在线玩家列表"""
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return server_tools.list_players()
     
     @filter.llm_tool(name="say_message")
@@ -257,16 +314,25 @@ class MCManagerPlugin(Star):
         Args:
             message(string): 要广播的消息
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return server_tools.say_message(message)
     
     @filter.llm_tool(name="save_world")
     async def tool_save_world(self, event: AstrMessageEvent) -> str:
         """保存世界数据"""
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return server_tools.save_world()
     
     @filter.llm_tool(name="whitelist_list")
     async def tool_whitelist_list(self, event: AstrMessageEvent) -> str:
         """获取白名单列表"""
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return server_tools.whitelist_list()
     
     @filter.llm_tool(name="banlist")
@@ -276,6 +342,9 @@ class MCManagerPlugin(Star):
         Args:
             ban_type(string): players或ips
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return server_tools.banlist(ban_type)
     
     @filter.llm_tool(name="execute_command")
@@ -285,6 +354,9 @@ class MCManagerPlugin(Star):
         Args:
             command(string): 要执行的命令（不需要/前缀）
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return server_tools.execute_command(command)
     
     @filter.llm_tool(name="set_weather")
@@ -295,6 +367,9 @@ class MCManagerPlugin(Star):
             weather_type(string): clear/rain/thunder
             duration(number): 可选，持续时间（秒）
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return world_tools.set_weather(weather_type, duration)
     
     @filter.llm_tool(name="set_time")
@@ -304,6 +379,9 @@ class MCManagerPlugin(Star):
         Args:
             time_value(string): 时间值，如day/noon/night/midnight或具体数字
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return world_tools.set_time(time_value)
     
     @filter.llm_tool(name="set_difficulty")
@@ -313,6 +391,9 @@ class MCManagerPlugin(Star):
         Args:
             difficulty(string): peaceful/easy/normal/hard
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return world_tools.set_difficulty(difficulty)
     
     @filter.llm_tool(name="set_gamerule")
@@ -323,6 +404,9 @@ class MCManagerPlugin(Star):
             rule(string): 游戏规则名称
             value(string): 规则值（true/false）
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return world_tools.set_gamerule(rule, value)
     
     @filter.llm_tool(name="summon_entity")
@@ -335,8 +419,30 @@ class MCManagerPlugin(Star):
             y(number): Y坐标
             z(number): Z坐标
         """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
         return world_tools.summon_entity(entity, x, y, z)
 
     # 工具已通过 @filter.llm_tool 装饰器自动注册到AstrBot
     # 用户直接与LLM对话时，LLM会自动识别并调用这些MC管理工具
     # 无需命令前缀，直接说"查看在线玩家"、"踢出Steve"等即可
+    
+    @filter.command("test_connection")
+    async def test_connection(self, event: AstrMessageEvent):
+        '''测试MC服务器RCON连接状态'''
+        logger.info("触发test_connection指令，正在测试RCON连接...")
+        
+        try:
+            success, message = self.rcon.test_connection()
+            if success:
+                result = f"✓ RCON连接成功\n服务器: {self.config.get('rcon_host')}:{self.config.get('rcon_port')}\n{message}"
+                logger.info(f"RCON连接测试成功: {message}")
+            else:
+                result = f"✗ RCON连接失败\n服务器: {self.config.get('rcon_host')}:{self.config.get('rcon_port')}\n原因: {message}"
+                logger.warning(f"RCON连接测试失败: {message}")
+        except Exception as e:
+            result = f"✗ RCON连接测试出错\n错误: {str(e)}"
+            logger.error(f"RCON连接测试出错: {str(e)}")
+        
+        yield event.plain_result(result)

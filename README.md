@@ -134,10 +134,27 @@ Bot: 设置游戏规则 keepInventory = true: Gamerule keepInventory is now set 
 
 ### 连接失败
 
+**如何开启RCON：**
+
+1. **找到服务器配置文件**：在MC服务器根目录找到 `server.properties` 文件
+2. **编辑配置文件**：使用文本编辑器打开，添加或修改以下配置：
+   ```properties
+   enable-rcon=true
+   rcon.port=25575
+   rcon.password=your_secure_password
+   broadcast-rcon-to-ops=true
+   ```
+3. **设置安全密码**：将 `your_secure_password` 替换为强密码
+4. **重启服务器**：保存文件后，**必须重启MC服务器**才能生效
+5. **验证配置**：服务器启动后，查看日志确认 "RCON running on..." 字样
+
+**故障排查步骤：**
+
 1. 确认MC服务器已启动
-2. 确认 `server.properties` 中已启用RCON
+2. 确认 `server.properties` 中已启用RCON（`enable-rcon=true`）
 3. 确认端口号和密码正确
 4. 确认防火墙允许RCON端口
+5. 如果MC和AstrBot在不同机器，确认 `rcon_host` 设置为MC服务器的IP地址而非 `localhost`
 
 ### 命令无响应
 
