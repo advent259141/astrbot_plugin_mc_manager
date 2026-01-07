@@ -46,6 +46,20 @@ class MCManagerPlugin(Star):
         self._inject_rcon()
         
         logger.info(f"MC Manager插件已加载，RCON: {self.config.get('rcon_host')}:{self.config.get('rcon_port')}")
+        
+        # 测试RCON连接并记录状态
+        self._test_and_log_connection()
+    
+    def _test_and_log_connection(self):
+        """测试RCON连接并记录连接状态到日志"""
+        try:
+            success, message = self.rcon.test_connection()
+            if success:
+                logger.info(f"✓ RCON连接成功: {self.config.get('rcon_host')}:{self.config.get('rcon_port')} - {message}")
+            else:
+                logger.warning(f"✗ RCON连接失败: {self.config.get('rcon_host')}:{self.config.get('rcon_port')} - {message}")
+        except Exception as e:
+            logger.error(f"✗ RCON连接测试出错: {str(e)}")
     
     def _inject_rcon(self):
         """将RCON客户端注入到所有工具模块"""
