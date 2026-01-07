@@ -1,24 +1,328 @@
-from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
+"""
+AstrBot MC服务器管理插件
+通过LLM智能管理Minecraft服务器，支持Fabric/Forge/NeoForge
+"""
+
+import logging
 from astrbot.api.star import Context, Star, register
-from astrbot.api import logger
+from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
+from astrbot.api import AstrBotConfig
 
-@register("helloworld", "YourName", "一个简单的 Hello World 插件", "1.0.0")
-class MyPlugin(Star):
-    def __init__(self, context: Context):
+from .rcon_client import MinecraftRCON
+from .tools import player_tools, game_tools, server_tools, world_tools
+
+logger = logging.getLogger(__name__)
+
+
+@register(
+    name="mc_manager",
+    desc="通过LLM智能管理Minecraft服务器",
+    version="1.0.0",
+    author="AstrBot Community"
+)
+class MCManagerPlugin(Star):
+    """Minecraft服务器管理插件"""
+    
+    def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
+        
+        # 从配置加载RCON设置
+        self.config = config
+        
+        # 初始化RCON客户端
+        self.rcon = MinecraftRCON(
+            host=self.config.get("rcon_host", "localhost"),
+            port=self.config.get("rcon_port", 25575),
+            password=self.config.get("rcon_password", "")
+        )
+        
+        # 加载管理员列表
+        self.admin_ids = set(self.config.get("admin_ids", []))
+        
+        # 是否启用危险命令
+        self.enable_dangerous = self.config.get("enable_dangerous_commands", False)
+        
+        # 注入RCON客户端到所有工具模块
+        self._inject_rcon()
+        
+        logger.info(f"MC Manager插件已加载，RCON: {self.config.get('rcon_host')}:{self.config.get('rcon_port')}")
+    
+    def _inject_rcon(self):
+        """将RCON客户端注入到所有工具模块"""
+        player_tools.set_rcon(self.rcon)
+        game_tools.set_rcon(self.rcon)
+        server_tools.set_rcon(self.rcon)
+        server_tools.set_dangerous_commands_enabled(self.enable_dangerous)
+        world_tools.set_rcon(self.rcon)
+    
+    def is_admin(self, user_id: str) -> bool:
+        """
+        检查用户是否为管理员
+        
+        Args:
+            user_id: 用户ID（QQ号）
+            
+        Returns:
+            是否为管理员，如果admin_ids为空则所有人都是管理员
+        """
+        if not self.admin_ids:
+            return True
+        return str(user_id) in self.admin_ids
+    
+    def _build_system_prompt(self) -> str:
+        """构建LLM系统提示"""
+        return """你是一个专业的Minecraft服务器管理助手。你可以帮助管理员管理MC服务器。
 
-    async def initialize(self):
-        """可选择实现异步的插件初始化方法，当实例化该插件类之后会自动调用该方法。"""
+你可以执行以下类型的操作：
 
-    # 注册指令的装饰器。指令名为 helloworld。注册成功后，发送 `/helloworld` 就会触发这个指令，并回复 `你好, {user_name}!`
-    @filter.command("helloworld")
-    async def helloworld(self, event: AstrMessageEvent):
-        """这是一个 hello world 指令""" # 这是 handler 的描述，将会被解析方便用户了解插件内容。建议填写。
-        user_name = event.get_sender_name()
-        message_str = event.message_str # 用户发的纯文本消息字符串
-        message_chain = event.get_messages() # 用户所发的消息的消息链 # from astrbot.api.message_components import *
-        logger.info(message_chain)
-        yield event.plain_result(f"Hello, {user_name}, 你发了 {message_str}!") # 发送一条纯文本消息
+【玩家管理】
+- 踢出玩家（kick）
+- 封禁/解封玩家（ban/pardon）
+- 管理OP权限（op/deop）
+- 白名单管理（whitelist add/remove）
 
-    async def terminate(self):
-        """可选择实现异步的插件销毁方法，当插件被卸载/停用时会调用。"""
+【游戏操作】
+- 给予物品（give）
+- 传送玩家（tp）
+- 设置游戏模式（gamemode）
+- 清空背包（clear）
+- 设置经验（xp）
+
+【服务器管理】
+- 查看在线玩家（list）
+- 广播消息（say）
+- 保存世界（save-all）
+- 查看封禁列表（banlist）
+
+【世界操作】
+- 设置天气（weather）
+- 设置时间（time）
+- 设置难度（difficulty）
+- 设置游戏规则（gamerule）
+- 生成实体（summon）
+
+请根据用户的请求，调用相应的工具来完成操作。如果用户的请求不明确，请询问具体信息。
+对于玩家名称，请确保用户提供了准确的玩家名。"""
+
+    @filter.llm_tool(name="kick_player")
+    async def tool_kick_player(self, event: AstrMessageEvent, player: str, reason: str = "被管理员踢出") -> str:
+        """踢出指定玩家
+        
+        Args:
+            player(string): 要踢出的玩家名称
+            reason(string): 踢出原因
+        """
+        return player_tools.kick_player(player, reason)
+    
+    @filter.llm_tool(name="ban_player")
+    async def tool_ban_player(self, event: AstrMessageEvent, player: str, reason: str = "违反服务器规则") -> str:
+        """封禁指定玩家
+        
+        Args:
+            player(string): 要封禁的玩家名称
+            reason(string): 封禁原因
+        """
+        return player_tools.ban_player(player, reason)
+    
+    @filter.llm_tool(name="pardon_player")
+    async def tool_pardon_player(self, event: AstrMessageEvent, player: str) -> str:
+        """解封指定玩家
+        
+        Args:
+            player(string): 要解封的玩家名称
+        """
+        return player_tools.pardon_player(player)
+    
+    @filter.llm_tool(name="op_player")
+    async def tool_op_player(self, event: AstrMessageEvent, player: str) -> str:
+        """给予玩家OP权限
+        
+        Args:
+            player(string): 要给予OP权限的玩家名称
+        """
+        return player_tools.op_player(player)
+    
+    @filter.llm_tool(name="deop_player")
+    async def tool_deop_player(self, event: AstrMessageEvent, player: str) -> str:
+        """移除玩家的OP权限
+        
+        Args:
+            player(string): 要移除OP权限的玩家名称
+        """
+        return player_tools.deop_player(player)
+    
+    @filter.llm_tool(name="whitelist_add")
+    async def tool_whitelist_add(self, event: AstrMessageEvent, player: str) -> str:
+        """将玩家添加到白名单
+        
+        Args:
+            player(string): 要添加到白名单的玩家名称
+        """
+        return player_tools.whitelist_add(player)
+    
+    @filter.llm_tool(name="whitelist_remove")
+    async def tool_whitelist_remove(self, event: AstrMessageEvent, player: str) -> str:
+        """将玩家从白名单移除
+        
+        Args:
+            player(string): 要从白名单移除的玩家名称
+        """
+        return player_tools.whitelist_remove(player)
+    
+    @filter.llm_tool(name="give_item")
+    async def tool_give_item(self, event: AstrMessageEvent, player: str, item: str, count: int = 1) -> str:
+        """给予玩家物品
+        
+        Args:
+            player(string): 要给予物品的玩家名称
+            item(string): 物品ID，如diamond、iron_sword
+            count(number): 物品数量，默认1
+        """
+        return game_tools.give_item(player, item, count)
+    
+    @filter.llm_tool(name="teleport_player")
+    async def tool_teleport_player(self, event: AstrMessageEvent, player: str, target: str) -> str:
+        """传送玩家
+        
+        Args:
+            player(string): 要传送的玩家名称
+            target(string): 目标位置（坐标如"100 64 200"）或目标玩家名称
+        """
+        return game_tools.teleport_player(player, target)
+    
+    @filter.llm_tool(name="set_gamemode")
+    async def tool_set_gamemode(self, event: AstrMessageEvent, player: str, mode: str) -> str:
+        """设置玩家游戏模式
+        
+        Args:
+            player(string): 玩家名称
+            mode(string): 游戏模式：survival/creative/adventure/spectator
+        """
+        return game_tools.set_gamemode(player, mode)
+    
+    @filter.llm_tool(name="kill_entity")
+    async def tool_kill_entity(self, event: AstrMessageEvent, target: str) -> str:
+        """杀死指定实体
+        
+        Args:
+            target(string): 目标选择器或玩家名称
+        """
+        return game_tools.kill_entity(target)
+    
+    @filter.llm_tool(name="clear_inventory")
+    async def tool_clear_inventory(self, event: AstrMessageEvent, player: str, item: str = None) -> str:
+        """清空玩家背包
+        
+        Args:
+            player(string): 玩家名称
+            item(string): 可选，特定物品ID
+        """
+        return game_tools.clear_inventory(player, item)
+    
+    @filter.llm_tool(name="set_experience")
+    async def tool_set_experience(self, event: AstrMessageEvent, player: str, amount: int, operation: str = "set", unit: str = "points") -> str:
+        """设置玩家经验
+        
+        Args:
+            player(string): 玩家名称
+            amount(number): 经验数量
+            operation(string): set或add
+            unit(string): points或levels
+        """
+        return game_tools.set_experience(player, amount, operation, unit)
+    
+    @filter.llm_tool(name="list_players")
+    async def tool_list_players(self, event: AstrMessageEvent) -> str:
+        """获取在线玩家列表"""
+        return server_tools.list_players()
+    
+    @filter.llm_tool(name="say_message")
+    async def tool_say_message(self, event: AstrMessageEvent, message: str) -> str:
+        """向服务器广播消息
+        
+        Args:
+            message(string): 要广播的消息
+        """
+        return server_tools.say_message(message)
+    
+    @filter.llm_tool(name="save_world")
+    async def tool_save_world(self, event: AstrMessageEvent) -> str:
+        """保存世界数据"""
+        return server_tools.save_world()
+    
+    @filter.llm_tool(name="whitelist_list")
+    async def tool_whitelist_list(self, event: AstrMessageEvent) -> str:
+        """获取白名单列表"""
+        return server_tools.whitelist_list()
+    
+    @filter.llm_tool(name="banlist")
+    async def tool_banlist(self, event: AstrMessageEvent, ban_type: str = "players") -> str:
+        """获取封禁列表
+        
+        Args:
+            ban_type(string): players或ips
+        """
+        return server_tools.banlist(ban_type)
+    
+    @filter.llm_tool(name="execute_command")
+    async def tool_execute_command(self, event: AstrMessageEvent, command: str) -> str:
+        """执行自定义MC命令
+        
+        Args:
+            command(string): 要执行的命令（不需要/前缀）
+        """
+        return server_tools.execute_command(command)
+    
+    @filter.llm_tool(name="set_weather")
+    async def tool_set_weather(self, event: AstrMessageEvent, weather_type: str, duration: int = None) -> str:
+        """设置天气
+        
+        Args:
+            weather_type(string): clear/rain/thunder
+            duration(number): 可选，持续时间（秒）
+        """
+        return world_tools.set_weather(weather_type, duration)
+    
+    @filter.llm_tool(name="set_time")
+    async def tool_set_time(self, event: AstrMessageEvent, time_value: str) -> str:
+        """设置时间
+        
+        Args:
+            time_value(string): 时间值，如day/noon/night/midnight或具体数字
+        """
+        return world_tools.set_time(time_value)
+    
+    @filter.llm_tool(name="set_difficulty")
+    async def tool_set_difficulty(self, event: AstrMessageEvent, difficulty: str) -> str:
+        """设置难度
+        
+        Args:
+            difficulty(string): peaceful/easy/normal/hard
+        """
+        return world_tools.set_difficulty(difficulty)
+    
+    @filter.llm_tool(name="set_gamerule")
+    async def tool_set_gamerule(self, event: AstrMessageEvent, rule: str, value: str) -> str:
+        """设置游戏规则
+        
+        Args:
+            rule(string): 游戏规则名称
+            value(string): 规则值（true/false）
+        """
+        return world_tools.set_gamerule(rule, value)
+    
+    @filter.llm_tool(name="summon_entity")
+    async def tool_summon_entity(self, event: AstrMessageEvent, entity: str, x: float = None, y: float = None, z: float = None) -> str:
+        """生成实体
+        
+        Args:
+            entity(string): 实体类型
+            x(number): X坐标
+            y(number): Y坐标
+            z(number): Z坐标
+        """
+        return world_tools.summon_entity(entity, x, y, z)
+
+    # 工具已通过 @filter.llm_tool 装饰器自动注册到AstrBot
+    # 用户直接与LLM对话时，LLM会自动识别并调用这些MC管理工具
+    # 无需命令前缀，直接说"查看在线玩家"、"踢出Steve"等即可

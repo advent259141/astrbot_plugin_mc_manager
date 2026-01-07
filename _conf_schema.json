@@ -1,0 +1,32 @@
+{
+  "rcon_host": {
+    "type": "string",
+    "title": "RCON主机地址",
+    "description": "Minecraft服务器的IP地址或域名",
+    "default": "localhost"
+  },
+  "rcon_port": {
+    "type": "int",
+    "title": "RCON端口",
+    "description": "Minecraft服务器的RCON端口（默认25575）",
+    "default": 25575
+  },
+  "rcon_password": {
+    "type": "string",
+    "title": "RCON密码",
+    "description": "Minecraft服务器的RCON密码",
+    "default": ""
+  },
+  "admin_ids": {
+    "type": "list",
+    "title": "管理员QQ号列表",
+    "description": "允许使用此插件的QQ号列表，留空表示所有人可用",
+    "default": []
+  },
+  "enable_dangerous_commands": {
+    "type": "bool",
+    "title": "启用危险命令",
+    "description": "是否启用stop等危险命令",
+    "default": false
+  }
+}
