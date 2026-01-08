@@ -79,7 +79,7 @@ broadcast-rcon-to-ops=true
 
 1. **在MC服务器机器上运行日志服务器**：
    ```bash
-   python log_server.py /path/to/minecraft/logs/latest.log
+   python log_server.py（注意，请自行修改代码文件配置参数）
    ```
 
 2. **配置权限**：
