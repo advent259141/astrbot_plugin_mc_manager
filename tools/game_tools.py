@@ -29,7 +29,7 @@ def get_rcon() -> "MinecraftRCON":
 # ============ 工具函数定义 ============
 
 
-def give_item(player: str, item: str, count: int = 1) -> str:
+async def give_item(player: str, item: str, count: int = 1) -> str:
     """
     给予玩家物品
 
@@ -49,11 +49,11 @@ def give_item(player: str, item: str, count: int = 1) -> str:
     # 限制数量范围
     count = max(1, min(count, 64))
     
-    result = rcon.execute(f"give {player} {item} {count}")
+    result = await rcon.execute_async(f"give {player} {item} {count}")
     return f"给予 {player} {count}个 {item}: {result}"
 
 
-def teleport_player(player: str, target: str) -> str:
+async def teleport_player(player: str, target: str) -> str:
     """
     传送玩家到目标位置或其他玩家
 
@@ -65,11 +65,11 @@ def teleport_player(player: str, target: str) -> str:
         执行结果信息
     """
     rcon = get_rcon()
-    result = rcon.execute(f"tp {player} {target}")
+    result = await rcon.execute_async(f"tp {player} {target}")
     return f"传送 {player} 到 {target}: {result}"
 
 
-def set_gamemode(player: str, mode: str) -> str:
+async def set_gamemode(player: str, mode: str) -> str:
     """
     设置玩家的游戏模式
 
@@ -95,11 +95,11 @@ def set_gamemode(player: str, mode: str) -> str:
     }
     mode = mode_map.get(mode.lower(), mode.lower())
     
-    result = rcon.execute(f"gamemode {mode} {player}")
+    result = await rcon.execute_async(f"gamemode {mode} {player}")
     return f"设置 {player} 的游戏模式为 {mode}: {result}"
 
 
-def kill_entity(target: str) -> str:
+async def kill_entity(target: str) -> str:
     """
     杀死指定实体或玩家
 
@@ -110,11 +110,11 @@ def kill_entity(target: str) -> str:
         执行结果信息
     """
     rcon = get_rcon()
-    result = rcon.execute(f"kill {target}")
+    result = await rcon.execute_async(f"kill {target}")
     return f"杀死 {target}: {result}"
 
 
-def clear_inventory(player: str, item: Optional[str] = None) -> str:
+async def clear_inventory(player: str, item: Optional[str] = None) -> str:
     """
     清空玩家背包或移除特定物品
 
@@ -130,14 +130,14 @@ def clear_inventory(player: str, item: Optional[str] = None) -> str:
     if item:
         if not item.startswith("minecraft:"):
             item = f"minecraft:{item}"
-        result = rcon.execute(f"clear {player} {item}")
+        result = await rcon.execute_async(f"clear {player} {item}")
         return f"从 {player} 的背包移除 {item}: {result}"
     else:
-        result = rcon.execute(f"clear {player}")
+        result = await rcon.execute_async(f"clear {player}")
         return f"清空 {player} 的背包: {result}"
 
 
-def set_experience(player: str, amount: int, operation: str = "set", unit: str = "points") -> str:
+async def set_experience(player: str, amount: int, operation: str = "set", unit: str = "points") -> str:
     """
     设置或修改玩家经验
 
@@ -160,5 +160,5 @@ def set_experience(player: str, amount: int, operation: str = "set", unit: str =
     if unit.lower() not in ["points", "levels"]:
         unit = "points"
     
-    result = rcon.execute(f"xp {operation} {player} {amount} {unit}")
+    result = await rcon.execute_async(f"xp {operation} {player} {amount} {unit}")
     return f"{operation} {player} 的经验 {amount} {unit}: {result}"

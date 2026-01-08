@@ -36,7 +36,7 @@ def get_rcon() -> "MinecraftRCON":
 # ============ 工具函数定义 ============
 
 
-def list_players() -> str:
+async def list_players() -> str:
     """
     获取当前在线玩家列表
 
@@ -44,11 +44,11 @@ def list_players() -> str:
         在线玩家信息
     """
     rcon = get_rcon()
-    result = rcon.execute("list")
+    result = await rcon.execute_async("list")
     return f"在线玩家: {result}"
 
 
-def say_message(message: str) -> str:
+async def say_message(message: str) -> str:
     """
     向服务器所有玩家广播消息
 
@@ -59,11 +59,11 @@ def say_message(message: str) -> str:
         执行结果信息
     """
     rcon = get_rcon()
-    result = rcon.execute(f"say {message}")
+    result = await rcon.execute_async(f"say {message}")
     return f"已广播消息: {message}"
 
 
-def tellraw(message: str, sender: str = "Bot", color: str = "yellow", target: str = "@a") -> str:
+async def tellraw(message: str, sender: str = "Bot", color: str = "yellow", target: str = "@a") -> str:
     """
     通过tellraw在游戏公屏发送聊天消息
 
@@ -85,11 +85,11 @@ def tellraw(message: str, sender: str = "Bot", color: str = "yellow", target: st
     # 构建JSON格式的tellraw命令
     json_text = f'{{"text":"<{sender}> {message}", "color":"{color}"}}'
     
-    result = rcon.execute(f'tellraw {target} {json_text}')
+    result = await rcon.execute_async(f'tellraw {target} {json_text}')
     return f"发送消息到 {target}: <{sender}> {message} [{result}]"
 
 
-def title(title_text: str, subtitle_text: str = "", color: str = "white", target: str = "@a", fade_in: int = 10, stay: int = 70, fade_out: int = 20) -> str:
+async def title(title_text: str, subtitle_text: str = "", color: str = "white", target: str = "@a", fade_in: int = 10, stay: int = 70, fade_out: int = 20) -> str:
     """
     在玩家屏幕中央显示大字
 
@@ -112,16 +112,16 @@ def title(title_text: str, subtitle_text: str = "", color: str = "white", target
     subtitle_text = subtitle_text.replace('"', '\\"')
     
     # 设置显示时间
-    rcon.execute(f'title {target} times {fade_in} {stay} {fade_out}')
+    await rcon.execute_async(f'title {target} times {fade_in} {stay} {fade_out}')
     
     # 如果有副标题，先设置副标题
     if subtitle_text:
         subtitle_json = f'{{"text":"{subtitle_text}", "color":"{color}"}}'
-        rcon.execute(f'title {target} subtitle {subtitle_json}')
+        await rcon.execute_async(f'title {target} subtitle {subtitle_json}')
     
     # 设置标题
     title_json = f'{{"text":"{title_text}", "color":"{color}"}}'
-    result = rcon.execute(f'title {target} title {title_json}')
+    result = await rcon.execute_async(f'title {target} title {title_json}')
     
     if subtitle_text:
         return f"显示标题到 {target}: {title_text} (副标题: {subtitle_text}) [{result}]"
@@ -129,7 +129,7 @@ def title(title_text: str, subtitle_text: str = "", color: str = "white", target
         return f"显示标题到 {target}: {title_text} [{result}]"
 
 
-def stop_server() -> str:
+async def stop_server() -> str:
     """
     停止Minecraft服务器（危险操作）
 
@@ -142,11 +142,11 @@ def stop_server() -> str:
         return "错误: 停止服务器是危险操作，已被配置禁用。请在插件配置中启用 'enable_dangerous_commands' 选项。"
     
     rcon = get_rcon()
-    result = rcon.execute("stop")
+    result = await rcon.execute_async("stop")
     return f"服务器停止命令已发送: {result}"
 
 
-def save_world() -> str:
+async def save_world() -> str:
     """
     保存世界数据
 
@@ -154,11 +154,11 @@ def save_world() -> str:
         执行结果信息
     """
     rcon = get_rcon()
-    result = rcon.execute("save-all")
+    result = await rcon.execute_async("save-all")
     return f"世界保存: {result}"
 
 
-def whitelist_list() -> str:
+async def whitelist_list() -> str:
     """
     获取白名单列表
 
@@ -166,11 +166,11 @@ def whitelist_list() -> str:
         白名单信息
     """
     rcon = get_rcon()
-    result = rcon.execute("whitelist list")
+    result = await rcon.execute_async("whitelist list")
     return f"白名单: {result}"
 
 
-def banlist(ban_type: str = "players") -> str:
+async def banlist(ban_type: str = "players") -> str:
     """
     获取封禁列表
 
@@ -183,14 +183,14 @@ def banlist(ban_type: str = "players") -> str:
     rcon = get_rcon()
     
     if ban_type.lower() == "ips":
-        result = rcon.execute("banlist ips")
+        result = await rcon.execute_async("banlist ips")
         return f"IP封禁列表: {result}"
     else:
-        result = rcon.execute("banlist players")
+        result = await rcon.execute_async("banlist players")
         return f"玩家封禁列表: {result}"
 
 
-def execute_command(command: str) -> str:
+async def execute_command(command: str) -> str:
     """
     执行自定义Minecraft命令（高级功能）
 
@@ -209,11 +209,11 @@ def execute_command(command: str) -> str:
     if cmd_base in dangerous_commands and not _enable_dangerous_commands:
         return f"错误: 命令 '{cmd_base}' 是危险命令，已被禁用。"
     
-    result = rcon.execute(command)
+    result = await rcon.execute_async(command)
     return f"执行命令 '{command}': {result}"
 
 
-def get_server_status() -> str:
+async def get_server_status() -> str:
     """
     获取服务器状态信息
 
@@ -223,7 +223,7 @@ def get_server_status() -> str:
     rcon = get_rcon()
     
     # 获取玩家列表
-    players_result = rcon.execute("list")
+    players_result = await rcon.execute_async("list")
     
     # 尝试获取TPS（如果服务器支持）
     # 注意：这个命令在不同服务器上可能不可用
@@ -231,7 +231,7 @@ def get_server_status() -> str:
     return f"服务器状态:\n在线玩家: {players_result}"
 
 
-def whitelist_on() -> str:
+async def whitelist_on() -> str:
     """
     开启白名单
 
@@ -239,11 +239,11 @@ def whitelist_on() -> str:
         执行结果信息
     """
     rcon = get_rcon()
-    result = rcon.execute("whitelist on")
+    result = await rcon.execute_async("whitelist on")
     return f"白名单已开启: {result}"
 
 
-def whitelist_off() -> str:
+async def whitelist_off() -> str:
     """
     关闭白名单
 
@@ -251,11 +251,11 @@ def whitelist_off() -> str:
         执行结果信息
     """
     rcon = get_rcon()
-    result = rcon.execute("whitelist off")
+    result = await rcon.execute_async("whitelist off")
     return f"白名单已关闭: {result}"
 
 
-def reload_whitelist() -> str:
+async def reload_whitelist() -> str:
     """
     重新加载白名单
 
@@ -263,5 +263,5 @@ def reload_whitelist() -> str:
         执行结果信息
     """
     rcon = get_rcon()
-    result = rcon.execute("whitelist reload")
+    result = await rcon.execute_async("whitelist reload")
     return f"白名单已重新加载: {result}"

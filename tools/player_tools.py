@@ -29,7 +29,7 @@ def get_rcon() -> "MinecraftRCON":
 # ============ 工具函数定义 ============
 
 
-def kick_player(player: str, reason: str = "被管理员踢出") -> str:
+async def kick_player(player: str, reason: str = "被管理员踢出") -> str:
     """
     踢出指定玩家
 
@@ -41,11 +41,11 @@ def kick_player(player: str, reason: str = "被管理员踢出") -> str:
         执行结果信息
     """
     rcon = get_rcon()
-    result = rcon.execute(f"kick {player} {reason}")
+    result = await rcon.execute_async(f"kick {player} {reason}")
     return f"踢出玩家 {player}: {result}"
 
 
-def ban_player(player: str, reason: str = "违反服务器规则") -> str:
+async def ban_player(player: str, reason: str = "违反服务器规则") -> str:
     """
     封禁指定玩家
 
@@ -57,11 +57,11 @@ def ban_player(player: str, reason: str = "违反服务器规则") -> str:
         执行结果信息
     """
     rcon = get_rcon()
-    result = rcon.execute(f"ban {player} {reason}")
+    result = await rcon.execute_async(f"ban {player} {reason}")
     return f"封禁玩家 {player}: {result}"
 
 
-def pardon_player(player: str) -> str:
+async def pardon_player(player: str) -> str:
     """
     解封指定玩家
 
@@ -72,11 +72,11 @@ def pardon_player(player: str) -> str:
         执行结果信息
     """
     rcon = get_rcon()
-    result = rcon.execute(f"pardon {player}")
+    result = await rcon.execute_async(f"pardon {player}")
     return f"解封玩家 {player}: {result}"
 
 
-def op_player(player: str) -> str:
+async def op_player(player: str) -> str:
     """
     给予玩家OP权限
 
@@ -87,11 +87,11 @@ def op_player(player: str) -> str:
         执行结果信息
     """
     rcon = get_rcon()
-    result = rcon.execute(f"op {player}")
+    result = await rcon.execute_async(f"op {player}")
     return f"给予 {player} OP权限: {result}"
 
 
-def deop_player(player: str) -> str:
+async def deop_player(player: str) -> str:
     """
     移除玩家的OP权限
 
@@ -102,11 +102,11 @@ def deop_player(player: str) -> str:
         执行结果信息
     """
     rcon = get_rcon()
-    result = rcon.execute(f"deop {player}")
+    result = await rcon.execute_async(f"deop {player}")
     return f"移除 {player} 的OP权限: {result}"
 
 
-def whitelist_add(player: str) -> str:
+async def whitelist_add(player: str) -> str:
     """
     将玩家添加到白名单
 
@@ -117,11 +117,11 @@ def whitelist_add(player: str) -> str:
         执行结果信息
     """
     rcon = get_rcon()
-    result = rcon.execute(f"whitelist add {player}")
+    result = await rcon.execute_async(f"whitelist add {player}")
     return f"添加 {player} 到白名单: {result}"
 
 
-def whitelist_remove(player: str) -> str:
+async def whitelist_remove(player: str) -> str:
     """
     将玩家从白名单移除
 
@@ -132,5 +132,5 @@ def whitelist_remove(player: str) -> str:
         执行结果信息
     """
     rcon = get_rcon()
-    result = rcon.execute(f"whitelist remove {player}")
+    result = await rcon.execute_async(f"whitelist remove {player}")
     return f"从白名单移除 {player}: {result}"

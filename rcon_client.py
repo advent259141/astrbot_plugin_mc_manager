@@ -1,16 +1,17 @@
 """
 Minecraft RCON客户端封装
 支持Fabric、Forge、NeoForge等所有使用标准RCON协议的服务器
+使用异步长连接方式
 """
 
-import threading
-from mcrcon import MCRcon
+import asyncio
+from aiomcrcon import Client
 from typing import Optional
 from astrbot.api import logger
 
 
 class MinecraftRCON:
-    """Minecraft RCON客户端封装类，支持连接复用"""
+    """Minecraft RCON客户端封装类（异步长连接）"""
     
     def __init__(self, host: str, port: int, password: str):
         """
@@ -24,36 +25,36 @@ class MinecraftRCON:
         self.host = host
         self.port = port
         self.password = password
-        self._connection: Optional[MCRcon] = None
-        self._lock = threading.Lock()  # 用于线程安全
+        self._client: Optional[Client] = None
+        self._lock = asyncio.Lock()
     
-    def _ensure_connection(self) -> MCRcon:
-        """确保RCON连接存在且有效，如果断开则重连"""
-        with self._lock:
-            if self._connection is None:
+    async def _ensure_connection(self) -> Client:
+        """确保RCON连接存在且有效"""
+        async with self._lock:
+            if self._client is None:
                 try:
-                    # 不使用 with 语句，避免 signal 问题
-                    self._connection = MCRcon(self.host, self.password, port=self.port, timeout=10)
-                    self._connection.connect()
+                    self._client = Client(self.host, self.port, self.password)
+                    await self._client.connect()
                     logger.info(f"RCON连接已建立: {self.host}:{self.port}")
                 except Exception as e:
                     logger.error(f"RCON连接建立失败: {e}")
+                    self._client = None
                     raise
-            return self._connection
+            return self._client
     
-    def _reconnect(self):
+    async def _reconnect(self):
         """重新建立连接"""
-        with self._lock:
-            if self._connection:
+        async with self._lock:
+            if self._client:
                 try:
-                    self._connection.disconnect()
+                    await self._client.close()
                 except:
                     pass
-                self._connection = None
+                self._client = None
     
-    def execute(self, command: str) -> str:
+    async def execute_async(self, command: str) -> str:
         """
-        执行RCON命令（使用持久连接）
+        执行RCON命令
         
         Args:
             command: 要执行的MC命令（不需要/前缀）
@@ -68,13 +69,13 @@ class MinecraftRCON:
         max_retries = 2
         for attempt in range(max_retries):
             try:
-                conn = self._ensure_connection()
-                response = conn.command(command)
+                client = await self._ensure_connection()
+                response = await client.send_cmd(command)
                 logger.info(f"执行命令: {command}, 响应: {response}")
                 return response if response else "命令执行成功（无返回信息）"
-            except (ConnectionRefusedError, ConnectionResetError, BrokenPipeError) as e:
+            except (ConnectionRefusedError, ConnectionResetError, BrokenPipeError, OSError) as e:
                 logger.warning(f"RCON连接异常 (尝试 {attempt + 1}/{max_retries}): {e}")
-                self._reconnect()
+                await self._reconnect()
                 if attempt == max_retries - 1:
                     error_msg = f"无法连接到服务器 {self.host}:{self.port}，请检查服务器是否启动且RCON已启用"
                     logger.error(error_msg)
@@ -84,41 +85,21 @@ class MinecraftRCON:
                 logger.error(error_msg)
                 return f"错误: {error_msg}"
     
-    def test_connection(self) -> tuple[bool, str]:
+    async def test_connection_async(self) -> tuple[bool, str]:
         """
         测试RCON连接
         
         Returns:
             (是否成功, 消息)
         """
-        mcr = None
         try:
-            # 使用临时连接进行测试，不使用 with 避免 signal 问题
-            mcr = MCRcon(self.host, self.password, port=self.port, timeout=5)
-            mcr.connect()
-            response = mcr.command("list")
+            client = await self._ensure_connection()
+            response = await client.send_cmd("list")
             return True, f"连接成功！{response}"
         except ConnectionRefusedError:
             return False, f"无法连接到 {self.host}:{self.port}"
         except Exception as e:
             return False, f"连接失败: {str(e)}"
-        finally:
-            if mcr:
-                try:
-                    mcr.disconnect()
-                except:
-                    pass
-    
-    def close(self):
-        """关闭RCON连接"""
-        with self._lock:
-            if self._connection:
-                try:
-                    self._connection.disconnect()
-                    logger.info("RCON连接已关闭")
-                except:
-                    pass
-                self._connection = None
     
     def get_online_players(self) -> tuple[int, list[str]]:
         """
@@ -171,6 +152,25 @@ class MinecraftRCON:
         
         return True, self.execute(command)
     
+    async def close(self):
+        """关闭RCON连接"""
+        async with self._lock:
+            if self._client:
+                try:
+                    await self._client.close()
+                    logger.info("RCON连接已关闭")
+                except:
+                    pass
+                self._client = None
+    
     def __del__(self):
         """析构时关闭连接"""
-        self.close()
+        if self._client:
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(self.close())
+                else:
+                    loop.run_until_complete(self.close())
+            except:
+                pass

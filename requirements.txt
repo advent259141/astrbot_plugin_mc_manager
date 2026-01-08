@@ -1,1 +1,1 @@
-mcrcon>=0.7.0
+aio-mc-rcon>=1.4.2

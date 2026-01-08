@@ -29,7 +29,7 @@ def get_rcon() -> "MinecraftRCON":
 # ============ 工具函数定义 ============
 
 
-def set_weather(weather_type: str, duration: Optional[int] = None) -> str:
+async def set_weather(weather_type: str, duration: Optional[int] = None) -> str:
     """
     设置游戏天气
 
@@ -59,14 +59,14 @@ def set_weather(weather_type: str, duration: Optional[int] = None) -> str:
         return f"错误: 无效的天气类型 '{weather_type}'，可选值：clear、rain、thunder"
     
     if duration:
-        result = rcon.execute(f"weather {weather_type} {duration}")
+        result = await rcon.execute_async(f"weather {weather_type} {duration}")
     else:
-        result = rcon.execute(f"weather {weather_type}")
+        result = await rcon.execute_async(f"weather {weather_type}")
     
     return f"设置天气为 {weather_type}: {result}"
 
 
-def set_time(time_value: str) -> str:
+async def set_time(time_value: str) -> str:
     """
     设置游戏时间
 
@@ -92,11 +92,11 @@ def set_time(time_value: str) -> str:
     }
     time_value = time_map.get(time_value, time_value.lower())
     
-    result = rcon.execute(f"time set {time_value}")
+    result = await rcon.execute_async(f"time set {time_value}")
     return f"设置时间为 {time_value}: {result}"
 
 
-def add_time(amount: int) -> str:
+async def add_time(amount: int) -> str:
     """
     增加游戏时间
 
@@ -107,11 +107,11 @@ def add_time(amount: int) -> str:
         执行结果信息
     """
     rcon = get_rcon()
-    result = rcon.execute(f"time add {amount}")
+    result = await rcon.execute_async(f"time add {amount}")
     return f"增加时间 {amount} 刻: {result}"
 
 
-def set_difficulty(difficulty: str) -> str:
+async def set_difficulty(difficulty: str) -> str:
     """
     设置游戏难度
 
@@ -139,11 +139,11 @@ def set_difficulty(difficulty: str) -> str:
     if difficulty not in ["peaceful", "easy", "normal", "hard"]:
         return f"错误: 无效的难度 '{difficulty}'，可选值：peaceful、easy、normal、hard"
     
-    result = rcon.execute(f"difficulty {difficulty}")
+    result = await rcon.execute_async(f"difficulty {difficulty}")
     return f"设置难度为 {difficulty}: {result}"
 
 
-def set_gamerule(rule: str, value: str) -> str:
+async def set_gamerule(rule: str, value: str) -> str:
     """
     设置游戏规则
 
@@ -180,11 +180,11 @@ def set_gamerule(rule: str, value: str) -> str:
     }
     value = value_map.get(value, value.lower())
     
-    result = rcon.execute(f"gamerule {rule} {value}")
+    result = await rcon.execute_async(f"gamerule {rule} {value}")
     return f"设置游戏规则 {rule} = {value}: {result}"
 
 
-def summon_entity(entity: str, x: Optional[float] = None, y: Optional[float] = None, z: Optional[float] = None) -> str:
+async def summon_entity(entity: str, x: Optional[float] = None, y: Optional[float] = None, z: Optional[float] = None) -> str:
     """
     在指定位置生成实体
 
@@ -204,14 +204,14 @@ def summon_entity(entity: str, x: Optional[float] = None, y: Optional[float] = N
         entity = f"minecraft:{entity}"
     
     if x is not None and y is not None and z is not None:
-        result = rcon.execute(f"summon {entity} {x} {y} {z}")
+        result = await rcon.execute_async(f"summon {entity} {x} {y} {z}")
         return f"在 ({x}, {y}, {z}) 生成 {entity}: {result}"
     else:
-        result = rcon.execute(f"summon {entity}")
+        result = await rcon.execute_async(f"summon {entity}")
         return f"生成 {entity}: {result}"
 
 
-def fill_blocks(x1: int, y1: int, z1: int, x2: int, y2: int, z2: int, block: str, mode: str = "replace") -> str:
+async def fill_blocks(x1: int, y1: int, z1: int, x2: int, y2: int, z2: int, block: str, mode: str = "replace") -> str:
     """
     用指定方块填充区域
 
@@ -234,11 +234,11 @@ def fill_blocks(x1: int, y1: int, z1: int, x2: int, y2: int, z2: int, block: str
     if not block.startswith("minecraft:"):
         block = f"minecraft:{block}"
     
-    result = rcon.execute(f"fill {x1} {y1} {z1} {x2} {y2} {z2} {block} {mode}")
+    result = await rcon.execute_async(f"fill {x1} {y1} {z1} {x2} {y2} {z2} {block} {mode}")
     return f"填充区域 ({x1},{y1},{z1}) 到 ({x2},{y2},{z2}) 为 {block}: {result}"
 
 
-def set_spawn(x: int, y: int, z: int) -> str:
+async def set_spawn(x: int, y: int, z: int) -> str:
     """
     设置世界出生点
 
@@ -251,5 +251,5 @@ def set_spawn(x: int, y: int, z: int) -> str:
         执行结果信息
     """
     rcon = get_rcon()
-    result = rcon.execute(f"setworldspawn {x} {y} {z}")
+    result = await rcon.execute_async(f"setworldspawn {x} {y} {z}")
     return f"设置世界出生点为 ({x}, {y}, {z}): {result}"
