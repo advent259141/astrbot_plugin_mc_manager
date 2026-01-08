@@ -3,15 +3,14 @@ Minecraft RCON客户端封装
 支持Fabric、Forge、NeoForge等所有使用标准RCON协议的服务器
 """
 
+import threading
 from mcrcon import MCRcon
 from typing import Optional
-import logging
-
-logger = logging.getLogger(__name__)
+from astrbot.api import logger
 
 
 class MinecraftRCON:
-    """Minecraft RCON客户端封装类"""
+    """Minecraft RCON客户端封装类，支持连接复用"""
     
     def __init__(self, host: str, port: int, password: str):
         """
@@ -25,11 +24,35 @@ class MinecraftRCON:
         self.host = host
         self.port = port
         self.password = password
-        self._connected = False
+        self._connection: Optional[MCRcon] = None
+        self._lock = threading.Lock()  # 用于线程安全
+    
+    def _ensure_connection(self) -> MCRcon:
+        """确保RCON连接存在且有效，如果断开则重连"""
+        with self._lock:
+            if self._connection is None:
+                try:
+                    self._connection = MCRcon(self.host, self.password, port=self.port)
+                    self._connection.connect()
+                    logger.info(f"RCON连接已建立: {self.host}:{self.port}")
+                except Exception as e:
+                    logger.error(f"RCON连接建立失败: {e}")
+                    raise
+            return self._connection
+    
+    def _reconnect(self):
+        """重新建立连接"""
+        with self._lock:
+            if self._connection:
+                try:
+                    self._connection.disconnect()
+                except:
+                    pass
+                self._connection = None
     
     def execute(self, command: str) -> str:
         """
-        执行RCON命令
+        执行RCON命令（使用持久连接）
         
         Args:
             command: 要执行的MC命令（不需要/前缀）
@@ -41,19 +64,24 @@ class MinecraftRCON:
         if command.startswith('/'):
             command = command[1:]
         
-        try:
-            with MCRcon(self.host, self.password, port=self.port) as mcr:
-                response = mcr.command(command)
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                conn = self._ensure_connection()
+                response = conn.command(command)
                 logger.info(f"执行命令: {command}, 响应: {response}")
                 return response if response else "命令执行成功（无返回信息）"
-        except ConnectionRefusedError:
-            error_msg = f"无法连接到服务器 {self.host}:{self.port}，请检查服务器是否启动且RCON已启用"
-            logger.error(error_msg)
-            return f"错误: {error_msg}"
-        except Exception as e:
-            error_msg = f"执行命令时出错: {str(e)}"
-            logger.error(error_msg)
-            return f"错误: {error_msg}"
+            except (ConnectionRefusedError, ConnectionResetError, BrokenPipeError) as e:
+                logger.warning(f"RCON连接异常 (尝试 {attempt + 1}/{max_retries}): {e}")
+                self._reconnect()
+                if attempt == max_retries - 1:
+                    error_msg = f"无法连接到服务器 {self.host}:{self.port}，请检查服务器是否启动且RCON已启用"
+                    logger.error(error_msg)
+                    return f"错误: {error_msg}"
+            except Exception as e:
+                error_msg = f"执行命令时出错: {str(e)}"
+                logger.error(error_msg)
+                return f"错误: {error_msg}"
     
     def test_connection(self) -> tuple[bool, str]:
         """
@@ -63,6 +91,7 @@ class MinecraftRCON:
             (是否成功, 消息)
         """
         try:
+            # 使用临时连接进行测试，不影响持久连接
             with MCRcon(self.host, self.password, port=self.port) as mcr:
                 response = mcr.command("list")
                 return True, f"连接成功！{response}"
@@ -70,6 +99,17 @@ class MinecraftRCON:
             return False, f"无法连接到 {self.host}:{self.port}"
         except Exception as e:
             return False, f"连接失败: {str(e)}"
+    
+    def close(self):
+        """关闭RCON连接"""
+        with self._lock:
+            if self._connection:
+                try:
+                    self._connection.disconnect()
+                    logger.info("RCON连接已关闭")
+                except:
+                    pass
+                self._connection = None
     
     def get_online_players(self) -> tuple[int, list[str]]:
         """
@@ -121,3 +161,7 @@ class MinecraftRCON:
             return False, f"命令 '{cmd_base}' 被标记为危险命令，已阻止执行"
         
         return True, self.execute(command)
+    
+    def __del__(self):
+        """析构时关闭连接"""
+        self.close()

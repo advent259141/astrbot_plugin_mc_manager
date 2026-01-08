@@ -3,15 +3,13 @@ AstrBot MC服务器管理插件
 通过LLM智能管理Minecraft服务器，支持Fabric/Forge/NeoForge
 """
 
-import logging
+import asyncio
 from astrbot.api.star import Context, Star, register
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
-from astrbot.api import AstrBotConfig
+from astrbot.api import AstrBotConfig, logger
 
 from .rcon_client import MinecraftRCON
 from .tools import player_tools, game_tools, server_tools, world_tools
-
-logger = logging.getLogger(__name__)
 
 
 @register(
@@ -97,41 +95,6 @@ class MCManagerPlugin(Star):
         if not self.is_admin(user_id):
             return False, f"权限不足：用户 {user_id} 不在管理员列表中"
         return True, ""
-    
-    def _build_system_prompt(self) -> str:
-        """构建LLM系统提示"""
-        return """你是一个专业的Minecraft服务器管理助手。你可以帮助管理员管理MC服务器。
-
-你可以执行以下类型的操作：
-
-【玩家管理】
-- 踢出玩家（kick）
-- 封禁/解封玩家（ban/pardon）
-- 管理OP权限（op/deop）
-- 白名单管理（whitelist add/remove）
-
-【游戏操作】
-- 给予物品（give）
-- 传送玩家（tp）
-- 设置游戏模式（gamemode）
-- 清空背包（clear）
-- 设置经验（xp）
-
-【服务器管理】
-- 查看在线玩家（list）
-- 广播消息（say）
-- 保存世界（save-all）
-- 查看封禁列表（banlist）
-
-【世界操作】
-- 设置天气（weather）
-- 设置时间（time）
-- 设置难度（difficulty）
-- 设置游戏规则（gamerule）
-- 生成实体（summon）
-
-请根据用户的请求，调用相应的工具来完成操作。如果用户的请求不明确，请询问具体信息。
-对于玩家名称，请确保用户提供了准确的玩家名。"""
 
     @filter.llm_tool(name="kick_player")
     async def tool_kick_player(self, event: AstrMessageEvent, player: str, reason: str = "被管理员踢出") -> str:
@@ -144,7 +107,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return player_tools.kick_player(player, reason)
+        return await asyncio.to_thread(player_tools.kick_player, player, reason)
     
     @filter.llm_tool(name="ban_player")
     async def tool_ban_player(self, event: AstrMessageEvent, player: str, reason: str = "违反服务器规则") -> str:
@@ -157,7 +120,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return player_tools.ban_player(player, reason)
+        return await asyncio.to_thread(player_tools.ban_player, player, reason)
     
     @filter.llm_tool(name="pardon_player")
     async def tool_pardon_player(self, event: AstrMessageEvent, player: str) -> str:
@@ -169,7 +132,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return player_tools.pardon_player(player)
+        return await asyncio.to_thread(player_tools.pardon_player, player)
     
     @filter.llm_tool(name="op_player")
     async def tool_op_player(self, event: AstrMessageEvent, player: str) -> str:
@@ -181,7 +144,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return player_tools.op_player(player)
+        return await asyncio.to_thread(player_tools.op_player, player)
     
     @filter.llm_tool(name="deop_player")
     async def tool_deop_player(self, event: AstrMessageEvent, player: str) -> str:
@@ -193,7 +156,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return player_tools.deop_player(player)
+        return await asyncio.to_thread(player_tools.deop_player, player)
     
     @filter.llm_tool(name="whitelist_add")
     async def tool_whitelist_add(self, event: AstrMessageEvent, player: str) -> str:
@@ -205,7 +168,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return player_tools.whitelist_add(player)
+        return await asyncio.to_thread(player_tools.whitelist_add, player)
     
     @filter.llm_tool(name="whitelist_remove")
     async def tool_whitelist_remove(self, event: AstrMessageEvent, player: str) -> str:
@@ -217,7 +180,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return player_tools.whitelist_remove(player)
+        return await asyncio.to_thread(player_tools.whitelist_remove, player)
     
     @filter.llm_tool(name="give_item")
     async def tool_give_item(self, event: AstrMessageEvent, player: str, item: str, count: int = 1) -> str:
@@ -231,7 +194,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return game_tools.give_item(player, item, count)
+        return await asyncio.to_thread(game_tools.give_item, player, item, count)
     
     @filter.llm_tool(name="teleport_player")
     async def tool_teleport_player(self, event: AstrMessageEvent, player: str, target: str) -> str:
@@ -244,7 +207,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return game_tools.teleport_player(player, target)
+        return await asyncio.to_thread(game_tools.teleport_player, player, target)
     
     @filter.llm_tool(name="set_gamemode")
     async def tool_set_gamemode(self, event: AstrMessageEvent, player: str, mode: str) -> str:
@@ -257,7 +220,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return game_tools.set_gamemode(player, mode)
+        return await asyncio.to_thread(game_tools.set_gamemode, player, mode)
     
     @filter.llm_tool(name="kill_entity")
     async def tool_kill_entity(self, event: AstrMessageEvent, target: str) -> str:
@@ -269,7 +232,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return game_tools.kill_entity(target)
+        return await asyncio.to_thread(game_tools.kill_entity, target)
     
     @filter.llm_tool(name="clear_inventory")
     async def tool_clear_inventory(self, event: AstrMessageEvent, player: str, item: str = None) -> str:
@@ -282,7 +245,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return game_tools.clear_inventory(player, item)
+        return await asyncio.to_thread(game_tools.clear_inventory, player, item)
     
     @filter.llm_tool(name="set_experience")
     async def tool_set_experience(self, event: AstrMessageEvent, player: str, amount: int, operation: str = "set", unit: str = "points") -> str:
@@ -297,7 +260,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return game_tools.set_experience(player, amount, operation, unit)
+        return await asyncio.to_thread(game_tools.set_experience, player, amount, operation, unit)
     
     @filter.llm_tool(name="list_players")
     async def tool_list_players(self, event: AstrMessageEvent) -> str:
@@ -305,7 +268,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return server_tools.list_players()
+        return await asyncio.to_thread(server_tools.list_players)
     
     @filter.llm_tool(name="say_message")
     async def tool_say_message(self, event: AstrMessageEvent, message: str) -> str:
@@ -317,7 +280,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return server_tools.say_message(message)
+        return await asyncio.to_thread(server_tools.say_message, message)
     
     @filter.llm_tool(name="save_world")
     async def tool_save_world(self, event: AstrMessageEvent) -> str:
@@ -325,7 +288,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return server_tools.save_world()
+        return await asyncio.to_thread(server_tools.save_world)
     
     @filter.llm_tool(name="whitelist_list")
     async def tool_whitelist_list(self, event: AstrMessageEvent) -> str:
@@ -333,7 +296,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return server_tools.whitelist_list()
+        return await asyncio.to_thread(server_tools.whitelist_list)
     
     @filter.llm_tool(name="banlist")
     async def tool_banlist(self, event: AstrMessageEvent, ban_type: str = "players") -> str:
@@ -345,7 +308,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return server_tools.banlist(ban_type)
+        return await asyncio.to_thread(server_tools.banlist, ban_type)
     
     @filter.llm_tool(name="execute_command")
     async def tool_execute_command(self, event: AstrMessageEvent, command: str) -> str:
@@ -357,7 +320,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return server_tools.execute_command(command)
+        return await asyncio.to_thread(server_tools.execute_command, command)
     
     @filter.llm_tool(name="set_weather")
     async def tool_set_weather(self, event: AstrMessageEvent, weather_type: str, duration: int = None) -> str:
@@ -370,7 +333,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return world_tools.set_weather(weather_type, duration)
+        return await asyncio.to_thread(world_tools.set_weather, weather_type, duration)
     
     @filter.llm_tool(name="set_time")
     async def tool_set_time(self, event: AstrMessageEvent, time_value: str) -> str:
@@ -382,7 +345,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return world_tools.set_time(time_value)
+        return await asyncio.to_thread(world_tools.set_time, time_value)
     
     @filter.llm_tool(name="set_difficulty")
     async def tool_set_difficulty(self, event: AstrMessageEvent, difficulty: str) -> str:
@@ -394,7 +357,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return world_tools.set_difficulty(difficulty)
+        return await asyncio.to_thread(world_tools.set_difficulty, difficulty)
     
     @filter.llm_tool(name="set_gamerule")
     async def tool_set_gamerule(self, event: AstrMessageEvent, rule: str, value: str) -> str:
@@ -407,7 +370,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return world_tools.set_gamerule(rule, value)
+        return await asyncio.to_thread(world_tools.set_gamerule, rule, value)
     
     @filter.llm_tool(name="summon_entity")
     async def tool_summon_entity(self, event: AstrMessageEvent, entity: str, x: float = None, y: float = None, z: float = None) -> str:
@@ -422,7 +385,7 @@ class MCManagerPlugin(Star):
         has_permission, error_msg = self._check_permission(event)
         if not has_permission:
             return error_msg
-        return world_tools.summon_entity(entity, x, y, z)
+        return await asyncio.to_thread(world_tools.summon_entity, entity, x, y, z)
 
     # 工具已通过 @filter.llm_tool 装饰器自动注册到AstrBot
     # 用户直接与LLM对话时，LLM会自动识别并调用这些MC管理工具
