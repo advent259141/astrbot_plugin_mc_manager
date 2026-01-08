@@ -12,6 +12,7 @@ from astrbot.core.provider.entities import LLMResponse
 from .rcon_client import MinecraftRCON
 from .tools import player_tools, game_tools, server_tools, world_tools
 from .log_client import LogClient
+from .script_executor import ScriptExecutor
 
 
 @register(
@@ -61,8 +62,14 @@ class MCManagerPlugin(Star):
             self.log_client.set_chat_callback(self._on_player_chat)
             self.log_client.set_fake_event_handler(self._send_fake_event)
         
+        # 初始化脚本执行器
+        self.script_executor = ScriptExecutor()
+        
         # 注入RCON客户端到所有工具模块
         self._inject_rcon()
+        
+        # 注册工具到脚本执行器
+        self._register_script_tools()
         
         logger.info(f"MC Manager插件已加载，RCON: {self.config.get('rcon_host')}:{self.config.get('rcon_port')}")
     
@@ -83,6 +90,44 @@ class MCManagerPlugin(Star):
         server_tools.set_rcon(self.rcon)
         server_tools.set_dangerous_commands_enabled(self.enable_dangerous)
         world_tools.set_rcon(self.rcon)
+    
+    def _register_script_tools(self):
+        """将所有工具函数注册到脚本执行器"""
+        # 玩家管理工具
+        self.script_executor.register_tool("kick_player", player_tools.kick_player)
+        self.script_executor.register_tool("ban_player", player_tools.ban_player)
+        self.script_executor.register_tool("pardon_player", player_tools.pardon_player)
+        self.script_executor.register_tool("op_player", player_tools.op_player)
+        self.script_executor.register_tool("deop_player", player_tools.deop_player)
+        self.script_executor.register_tool("whitelist_add", player_tools.whitelist_add)
+        self.script_executor.register_tool("whitelist_remove", player_tools.whitelist_remove)
+        
+        # 游戏操作工具
+        self.script_executor.register_tool("give_item", game_tools.give_item)
+        self.script_executor.register_tool("teleport_player", game_tools.teleport_player)
+        self.script_executor.register_tool("set_gamemode", game_tools.set_gamemode)
+        self.script_executor.register_tool("kill_entity", game_tools.kill_entity)
+        self.script_executor.register_tool("clear_inventory", game_tools.clear_inventory)
+        self.script_executor.register_tool("set_experience", game_tools.set_experience)
+        
+        # 服务器管理工具
+        self.script_executor.register_tool("list_players", server_tools.list_players)
+        self.script_executor.register_tool("say_message", server_tools.say_message)
+        self.script_executor.register_tool("tellraw", server_tools.tellraw)
+        self.script_executor.register_tool("title", server_tools.title)
+        self.script_executor.register_tool("save_world", server_tools.save_world)
+        self.script_executor.register_tool("whitelist_list", server_tools.whitelist_list)
+        self.script_executor.register_tool("banlist", server_tools.banlist)
+        self.script_executor.register_tool("execute_command", server_tools.execute_command)
+        
+        # 世界管理工具
+        self.script_executor.register_tool("set_weather", world_tools.set_weather)
+        self.script_executor.register_tool("set_time", world_tools.set_time)
+        self.script_executor.register_tool("set_difficulty", world_tools.set_difficulty)
+        self.script_executor.register_tool("set_gamerule", world_tools.set_gamerule)
+        self.script_executor.register_tool("summon_entity", world_tools.summon_entity)
+        
+        logger.info(f"已注册 {len(self.script_executor.tools)} 个工具到脚本执行器")
     
     async def _on_player_chat(self, player: str, message: str, time: str):
         """
@@ -454,10 +499,7 @@ class MCManagerPlugin(Star):
     
     @filter.llm_tool(name="list_players")
     async def tool_list_players(self, event: AstrMessageEvent) -> str:
-        """获取在线玩家列表"""
-        has_permission, error_msg = self._check_permission(event)
-        if not has_permission:
-            return error_msg
+        """获取在线玩家列表（无需权限）"""
         return await server_tools.list_players()
     
     @filter.llm_tool(name="say_message")
@@ -515,22 +557,16 @@ class MCManagerPlugin(Star):
     
     @filter.llm_tool(name="whitelist_list")
     async def tool_whitelist_list(self, event: AstrMessageEvent) -> str:
-        """获取白名单列表"""
-        has_permission, error_msg = self._check_permission(event)
-        if not has_permission:
-            return error_msg
+        """获取白名单列表（无需权限）"""
         return await server_tools.whitelist_list()
     
     @filter.llm_tool(name="banlist")
     async def tool_banlist(self, event: AstrMessageEvent, ban_type: str = "players") -> str:
-        """获取封禁列表
+        """获取封禁列表（无需权限）
         
         Args:
             ban_type(string): players或ips
         """
-        has_permission, error_msg = self._check_permission(event)
-        if not has_permission:
-            return error_msg
         return await server_tools.banlist(ban_type)
     
     @filter.llm_tool(name="execute_command")
@@ -609,6 +645,88 @@ class MCManagerPlugin(Star):
         if not has_permission:
             return error_msg
         return await world_tools.summon_entity(entity, x, y, z)
+    
+    @filter.llm_tool(name="execute_script")
+    async def tool_execute_script(self, event: AstrMessageEvent, script: str, timeout: int = 60) -> str:
+        """执行Python脚本来完成复杂的MC管理任务
+        
+        此工具允许你编写简单的Python脚本，调用现有的MC管理工具函数来完成复杂任务。
+        脚本中可以使用所有已注册的工具函数，如kick_player、give_item、set_weather等。
+        脚本会异步执行，适合需要多步操作或循环的任务。
+        
+        示例脚本：
+        ```python
+        # 给所有在线玩家发送欢迎消息和钻石
+        import asyncio
+        
+        async def main():
+            # 获取在线玩家
+            players_result = await list_players()
+            print(f"在线玩家: {players_result}")
+            
+            # 给每个玩家发送消息和物品
+            await tellraw("欢迎来到服务器！", sender="系统", color="gold")
+            await give_item("@a", "diamond", 5)
+            print("已给所有玩家5个钻石")
+        ```
+        
+        Args:
+            script(string): 要执行的Python脚本代码
+            timeout(number): 超时时间（秒），默认60秒
+        """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
+        
+        try:
+            result = await self.script_executor.execute_script(script, timeout=timeout)
+            
+            if result["success"]:
+                output = result["output"] if result["output"] else "脚本执行成功（无输出）"
+                return f"✓ 脚本执行成功\n\n输出:\n{output}"
+            else:
+                return f"✗ 脚本执行失败\n\n错误:\n{result['error']}\n\n输出:\n{result['output']}"
+                
+        except Exception as e:
+            logger.error(f"执行脚本时出错: {e}")
+            return f"✗ 脚本执行异常: {str(e)}"
+    
+    @filter.llm_tool(name="list_script_tools")
+    async def tool_list_script_tools(self, event: AstrMessageEvent) -> str:
+        """列出脚本中可以使用的所有工具函数（无需权限）
+        
+        返回所有已注册到脚本执行器的工具函数列表及其说明。
+        这些工具可以在execute_script中直接调用。
+        """
+        tools_info = self.script_executor.get_available_tools()
+        
+        result = "📋 脚本可用工具列表:\n\n"
+        
+        # 按类别分组
+        categories = {
+            "玩家管理": ["kick_player", "ban_player", "pardon_player", "op_player", "deop_player",
+                       "whitelist_add", "whitelist_remove"],
+            "游戏操作": ["give_item", "teleport_player", "set_gamemode", "kill_entity",
+                       "clear_inventory", "set_experience"],
+            "服务器管理": ["list_players", "say_message", "tellraw", "title", "save_world",
+                        "whitelist_list", "banlist", "execute_command"],
+            "世界管理": ["set_weather", "set_time", "set_difficulty", "set_gamerule", "summon_entity"]
+        }
+        
+        for category, tool_names in categories.items():
+            result += f"【{category}】\n"
+            for tool_name in tool_names:
+                if tool_name in tools_info:
+                    doc = tools_info[tool_name].split('\n')[0]  # 只取第一行
+                    result += f"  • {tool_name}: {doc}\n"
+            result += "\n"
+        
+        result += f"总计: {len(tools_info)} 个工具函数\n"
+        result += "\n使用示例:\n"
+        result += "await give_item('@a', 'diamond', 10)  # 给所有玩家10个钻石\n"
+        result += "await set_weather('clear')  # 设置晴天"
+        
+        return result
 
     # 工具已通过 @filter.llm_tool 装饰器自动注册到AstrBot
     # 用户直接与LLM对话时，LLM会自动识别并调用这些MC管理工具

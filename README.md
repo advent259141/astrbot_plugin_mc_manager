@@ -83,7 +83,7 @@ broadcast-rcon-to-ops=true
    ```
 
 2. **配置权限**：
-   - `admin_ids` 中添加MC玩家名即可授予权限
+   - `admin_ids` 中添加MC玩家名即可授予权限(你游戏名是啥就填啥)
    - 例如：`"admin_ids": ["Steve", "Alex"]` 允许这两个MC玩家执行管理命令
    - 格式：MC玩家的user_id为 `mc_player_{玩家名}`
 
@@ -131,39 +131,101 @@ Bot: 设置游戏规则 keepInventory = true: Gamerule keepInventory is now set 
 ## 🛠️ 支持的功能
 
 ### 玩家管理
-- ✅ 踢出玩家（kick）
-- ✅ 封禁/解封玩家（ban/pardon）
-- ✅ 管理OP权限（op/deop）
-- ✅ 白名单管理（whitelist）
+- ✅ 踢出玩家（kick）🔒
+- ✅ 封禁/解封玩家（ban/pardon）🔒
+- ✅ 管理OP权限（op/deop）🔒
+- ✅ 白名单管理（whitelist add/remove）🔒
 
 ### 游戏操作
-- ✅ 给予物品（give）
-- ✅ 传送玩家（tp）
-- ✅ 设置游戏模式（gamemode）
-- ✅ 杀死实体（kill）
-- ✅ 清空背包（clear）
-- ✅ 设置经验（xp）
+- ✅ 给予物品（give）🔒
+- ✅ 传送玩家（tp）🔒
+- ✅ 设置游戏模式（gamemode）🔒
+- ✅ 杀死实体（kill）🔒
+- ✅ 清空背包（clear）🔒
+- ✅ 设置经验（xp）🔒
 
 ### 服务器管理
-- ✅ 查看在线玩家（list）
-- ✅ 服务器广播（say）
-- ✅ 保存世界（save-all）
-- ✅ 查看封禁列表（banlist）
-- ⚠️ 停止服务器（stop）- 需启用危险命令
+- ✅ 查看在线玩家（list）🆓
+- ✅ 服务器广播（say）🔒
+- ✅ 格式化消息（tellraw）🔒
+- ✅ 屏幕标题（title）🔒
+- ✅ 保存世界（save-all）🔒
+- ✅ 查看白名单（whitelist list）🆓
+- ✅ 查看封禁列表（banlist）🆓
+- ✅ 执行自定义命令（execute_command）🔒
+- ⚠️ 停止服务器（stop）🔒 - 需启用危险命令
 
 ### 世界操作
-- ✅ 设置天气（weather）
-- ✅ 设置时间（time）
-- ✅ 设置难度（difficulty）
-- ✅ 设置游戏规则（gamerule）
-- ✅ 生成实体（summon）
+- ✅ 设置天气（weather）🔒
+- ✅ 设置时间（time）🔒
+- ✅ 设置难度（difficulty）🔒
+- ✅ 设置游戏规则（gamerule）🔒
+- ✅ 生成实体（summon）🔒
 
-## 🔐 安全建议
+### 🆕 脚本执行器
+- ✅ 执行Python脚本（execute_script）🔒
+- ✅ 列出可用工具（list_script_tools）🆓
+
+**图标说明：**
+- 🔒 需要管理员权限
+- 🆓 无需权限，所有人可用
+
+## 🎯 脚本执行器
+
+插件内置了强大的脚本执行器，允许LLM编写Python脚本来完成复杂的自动化任务。
+
+
+### 脚本功能特性
+
+- ✅ **异步执行**：支持 async/await 语法
+- ✅ **工具集成**：可调用所有40+个MC管理工具
+- ✅ **超时控制**：默认60秒超时，可自定义
+- ✅ **错误处理**：完善的异常捕获和错误报告
+- ✅ **输出捕获**：自动捕获print输出
+
+
+
+## 🔐 权限分级说明
+
+插件的所有工具按照危险程度分为不同等级：
+
+### 🟢 无需权限（只读操作）
+以下工具仅查询信息，不会修改服务器状态，**任何用户**都可以使用：
+
+- `list_players` - 查看在线玩家
+- `whitelist_list` - 查看白名单
+- `banlist` - 查看封禁列表
+- `list_script_tools` - 查看可用工具列表
+
+### 🔴 需要权限（管理操作）
+所有其他工具都需要管理员权限，包括：
+
+- **玩家管理**：kick、ban、op等
+- **游戏操作**：give、tp、gamemode等
+- **服务器管理**：save、say、tellraw等
+- **世界管理**：weather、time、difficulty等
+- **脚本执行**：execute_script
+
+### 权限配置示例
+
+```json
+{
+  "admin_ids": ["123456789", "Steve", "Alex"]
+}
+```
+
+- 留空 `[]`：所有人都有权限（**仅用于测试**）
+- 添加QQ号：QQ用户权限控制
+- 添加玩家名：MC玩家权限控制
+
+##  安全建议
 
 1. **设置强密码**：RCON密码应该使用强密码
-2. **限制管理员**：在 `admin_ids` 中明确指定可以使用的QQ号
-3. **禁用危险命令**：保持 `enable_dangerous_commands` 为 `false`，除非确实需要
-4. **防火墙配置**：如果MC服务器和AstrBot不在同一台机器，确保RCON端口的安全
+2. **限制管理员**：在 `admin_ids` 中明确指定可以使用的用户
+3. **生产环境必须配置管理员列表**：不要留空 `admin_ids`
+4. **禁用危险命令**：保持 `enable_dangerous_commands` 为 `false`，除非确实需要
+5. **防火墙配置**：如果MC服务器和AstrBot不在同一台机器，确保RCON端口的安全
+6. **谨慎使用脚本执行器**：`execute_script` 可以调用任何已注册工具，请仅授予信任用户
 
 ## 🔧 故障排除
 
@@ -198,6 +260,18 @@ Bot: 设置游戏规则 keepInventory = true: Gamerule keepInventory is now set 
 3. 查看AstrBot日志获取详细错误信息
 
 ## 📝 更新日志
+
+### v1.1.0
+- ✨ 新增脚本执行器功能
+  - 允许LLM编写Python脚本执行复杂任务
+  - 支持异步执行和超时控制
+  - 完善的错误处理和输出捕获
+- 🔓 权限优化
+  - 4个只读工具无需权限：list_players、whitelist_list、banlist、list_script_tools
+  - 所有管理操作工具保留权限控制
+- 📚 文档完善
+  - 添加脚本执行器详细文档
+  - 添加权限分级说明
 
 ### v1.0.0
 - 初始版本
