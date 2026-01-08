@@ -7,12 +7,6 @@ import asyncio
 import os
 from pathlib import Path
 from typing import Optional
-from datetime import datetime
-
-
-def log(msg):
-    """输出日志信息"""
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
 
 
 # ============ 配置区域 ============
@@ -22,12 +16,12 @@ def log(msg):
 SERVER_HOST = "127.0.0.1"
 
 # 服务器监听端口
-SERVER_PORT = 25576
+SERVER_PORT = 25571
 
 # MC服务器日志文件路径（可在这里配置，也可通过命令行参数指定）
 # 示例: r"C:\minecraft_server\logs\latest.log"
 # 留空则必须通过命令行参数指定
-DEFAULT_LOG_PATH = ""
+DEFAULT_LOG_PATH = r"C:\Users\Administrator\Desktop\nfwc\logs\latest.log"
 # ==================================
 
 
@@ -53,7 +47,7 @@ class LogServer:
     async def start(self):
         """启动日志服务器"""
         if not self.log_file_path.exists():
-            log(f"错误：日志文件不存在: {self.log_file_path}")
+            print(f"[ERROR] 日志文件不存在: {self.log_file_path}")
             return
         
         self.running = True
@@ -63,8 +57,8 @@ class LogServer:
             self.port
         )
         
-        log(f"日志服务器已启动: {self.host}:{self.port}")
-        log(f"监控日志文件: {self.log_file_path}")
+        print(f"[INFO] 日志服务器已启动: {self.host}:{self.port}")
+        print(f"[INFO] 监控日志文件: {self.log_file_path}")
         
         # 启动日志读取任务
         asyncio.create_task(self._tail_log_file())
@@ -78,12 +72,12 @@ class LogServer:
         if self.server:
             self.server.close()
             await self.server.wait_closed()
-        log("日志服务器已停止")
+        print("[INFO] 日志服务器已停止")
     
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         """处理客户端连接"""
         addr = writer.get_extra_info('peername')
-        log(f"客户端已连接: {addr}")
+        print(f"[INFO] 客户端已连接: {addr}")
         
         client_info = (reader, writer)
         self.clients.add(client_info)
@@ -96,12 +90,12 @@ class LogServer:
                     break
                 await asyncio.sleep(0.1)
         except Exception as e:
-            log(f"错误：客户端连接错误: {e}")
+            print(f"[ERROR] 客户端连接错误: {e}")
         finally:
             self.clients.remove(client_info)
             writer.close()
             await writer.wait_closed()
-            log(f"客户端已断开: {addr}")
+            print(f"[INFO] 客户端已断开: {addr}")
     
     async def _tail_log_file(self):
         """实时读取日志文件最后一行"""
@@ -133,7 +127,7 @@ class LogServer:
                 writer.write(data)
                 await writer.drain()
             except Exception as e:
-                log(f"错误：发送数据失败: {e}")
+                print(f"[ERROR] 发送数据失败: {e}")
                 disconnected.add((reader, writer))
         
         # 移除断开的客户端
