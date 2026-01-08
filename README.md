@@ -47,8 +47,14 @@ broadcast-rcon-to-ops=true
 | `rcon_host` | MC服务器地址 | `localhost` |
 | `rcon_port` | RCON端口 | `25575` |
 | `rcon_password` | RCON密码 | - |
-| `admin_ids` | 管理员QQ号列表 | `[]`（空表示所有人可用） |
+| `admin_ids` | 管理员ID列表（QQ号或MC玩家名） | `[]`（空表示所有人可用） |
 | `enable_dangerous_commands` | 启用危险命令（如stop） | `false` |
+| `enable_log_monitor` | 启用MC日志监控 | `false` |
+| `log_server_host` | 日志服务器地址 | `127.0.0.1` |
+| `log_server_port` | 日志服务器端口 | `25576` |
+| `wake_words` | 唤醒词列表 | `["bot"]` |
+| `enable_chat_response` | 将LLM响应发送回MC聊天框 | `true` |
+| `bot_nickname` | 在MC中显示的机器人昵称 | `"Bot"` |
 
 配置示例：
 ```json
@@ -56,10 +62,39 @@ broadcast-rcon-to-ops=true
   "rcon_host": "127.0.0.1",
   "rcon_port": 25575,
   "rcon_password": "your_password",
-  "admin_ids": ["123456789", "987654321"],
-  "enable_dangerous_commands": false
+  "admin_ids": ["123456789", "Steve", "Alex"],
+  "enable_dangerous_commands": false,
+  "enable_log_monitor": true,
+  "log_server_host": "127.0.0.1",
+  "log_server_port": 25576,
+  "wake_words": ["小助手", "bot"],
+  "enable_chat_response": true,
+  "bot_nickname": "MC助手"
 }
 ```
+
+### 3. MC游戏内聊天支持（可选）
+
+如果启用 `enable_log_monitor`，可以在MC游戏内直接与机器人对话：
+
+1. **在MC服务器机器上运行日志服务器**：
+   ```bash
+   python log_server.py /path/to/minecraft/logs/latest.log
+   ```
+
+2. **配置权限**：
+   - `admin_ids` 中添加MC玩家名即可授予权限
+   - 例如：`"admin_ids": ["Steve", "Alex"]` 允许这两个MC玩家执行管理命令
+   - 格式：MC玩家的user_id为 `mc_player_{玩家名}`
+
+3. **在MC中使用**：
+   - 发送包含唤醒词的消息：`小助手 查看在线玩家`
+   - 机器人会自动回复到MC聊天框
+
+**权限校验说明**：
+- QQ消息：使用QQ号校验（如 `"123456789"`）
+- MC消息：使用玩家名校验（如 `"Steve"`）
+- 系统会自动识别消息来源并应用对应的权限规则
 
 ## 📖 使用方法
 

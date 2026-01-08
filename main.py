@@ -7,9 +7,11 @@ import asyncio
 from astrbot.api.star import Context, Star, register
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api import AstrBotConfig, logger
+from astrbot.core.provider.entities import LLMResponse
 
 from .rcon_client import MinecraftRCON
 from .tools import player_tools, game_tools, server_tools, world_tools
+from .log_client import LogClient
 
 
 @register(
@@ -40,12 +42,39 @@ class MCManagerPlugin(Star):
         # 是否启用危险命令
         self.enable_dangerous = self.config.get("enable_dangerous_commands", False)
         
+        # 加载唤醒词配置
+        self.wake_words = self.config.get("wake_words", ["bot"])
+        
+        # 是否启用聊天响应
+        self.enable_chat_response = self.config.get("enable_chat_response", True)
+        
+        # 加载机器人昵称配置
+        self.bot_nickname = self.config.get("bot_nickname", "Bot")
+        
+        # 初始化日志客户端（如果启用）
+        self.log_client = None
+        enable_log = self.config.get("enable_log_monitor", False)
+        if enable_log:
+            log_host = self.config.get("log_server_host", "127.0.0.1")
+            log_port = self.config.get("log_server_port", 25576)
+            self.log_client = LogClient(log_host, log_port, wake_words=self.wake_words)
+            self.log_client.set_chat_callback(self._on_player_chat)
+            self.log_client.set_fake_event_handler(self._send_fake_event)
+        
         # 注入RCON客户端到所有工具模块
         self._inject_rcon()
         
         logger.info(f"MC Manager插件已加载，RCON: {self.config.get('rcon_host')}:{self.config.get('rcon_port')}")
-        
-        # 异步初始化时会测试连接，这里不在 __init__ 中测试
+    
+    async def initialize(self):
+        """插件激活时自动调用 - 启动长连接任务"""
+        # 启动日志客户端
+        if self.log_client:
+            if await self.log_client.connect():
+                asyncio.create_task(self.log_client.start_listening())
+                logger.info("日志监控已启动")
+            else:
+                logger.error("日志监控启动失败：无法连接到日志服务器")
     
     def _inject_rcon(self):
         """将RCON客户端注入到所有工具模块"""
@@ -55,19 +84,192 @@ class MCManagerPlugin(Star):
         server_tools.set_dangerous_commands_enabled(self.enable_dangerous)
         world_tools.set_rcon(self.rcon)
     
+    async def _on_player_chat(self, player: str, message: str, time: str):
+        """
+        处理玩家聊天消息的回调函数
+        
+        Args:
+            player: 玩家名称
+            message: 聊天消息内容
+            time: 消息时间
+        """
+        pass
+    
+    async def _send_fake_event(self, player: str, message: str):
+        """
+        伪造一个消息事件并发送到EventBus
+        
+        Args:
+            player: 玩家名称
+            message: 消息内容
+        """
+        try:
+            from astrbot.core.star.star_tools import StarTools
+            from astrbot.core.message.components import Plain
+            from astrbot.core.platform.astrbot_message import MessageMember
+            
+            # 由于 MC 聊天不是原生会话，我们需要自定义参数
+            # 使用固定的 session_id 用于标识 MC 聊天来源
+            mc_session_id = "mc_server_chat"
+            
+            # 使用真实的玩家信息
+            sender = MessageMember(
+                user_id=f"mc_player_{player}",  # 用玩家名作为ID
+                nickname=f"{player}(MC)"  # 显示玩家名和来源
+            )
+            
+            # 构造消息文本
+            message_text = f"[MC] {message}"
+            
+            # 创建新消息对象
+            new_message = await StarTools.create_message(
+                type="GroupMessage",  # 使用正确的枚举值
+                self_id="astrbot_mc_plugin",
+                session_id=mc_session_id,
+                sender=sender,
+                message=[Plain(message_text)],
+                message_str=message_text,
+                group_id=mc_session_id  # 使用相同的 session_id 作为 group_id
+            )
+            
+            # 伪造事件并提交
+            await StarTools.create_event(
+                abm=new_message,
+                platform="aiocqhttp",  # 使用支持的平台名称
+                is_wake=True  # 标记为已唤醒
+            )
+            
+            logger.info(f"已发送伪造事件: [{player}] {message}")
+            
+        except Exception as e:
+            logger.error(f"发送伪造事件失败: {e}")
+    
+    
+    async def terminate(self):
+        """插件禁用/重载时自动调用 - 清理资源"""
+        # 断开日志客户端
+        if self.log_client:
+            await self.log_client.disconnect()
+            logger.info("日志监控已停止")
+    
+    @filter.on_llm_response()
+    async def on_llm_response(self, event: AstrMessageEvent, response: LLMResponse):
+        """
+        LLM响应后的钩子，用于将响应发送到MC聊天框
+        
+        Args:
+            event: 原始消息事件
+            response: LLM的响应
+        """
+        # 检查是否启用聊天响应功能
+        if not self.enable_chat_response:
+            return
+        
+        try:
+            # 检查是否来自MC会话
+            if event.session_id == "mc_server_chat":
+                # 获取响应文本
+                response_text = ""
+                if response.result_chain:
+                    # 从消息链中提取文本
+                    response_text = response.result_chain.get_plain_text()
+                elif response._completion_text:
+                    response_text = response._completion_text
+                
+                if response_text:
+                    # 发送到MC服务器聊天框
+                    await self._send_to_mc_chat(response_text)
+        except Exception as e:
+            logger.error(f"处理LLM响应时出错: {e}")
+    
+    async def _send_to_mc_chat(self, message: str):
+        """
+        将消息发送到MC服务器聊天框
+        
+        Args:
+            message: 要发送的消息内容
+        """
+        try:
+            # MC聊天框有长度限制，需要分段发送
+            max_length = 200  # 每段最大长度
+            
+            # 处理换行符，分段发送
+            lines = message.split('\n')
+            current_chunk = ""
+            
+            for line in lines:
+                # 如果当前行太长，需要进一步拆分
+                if len(line) > max_length:
+                    # 先发送当前累积的内容
+                    if current_chunk:
+                        await self._send_single_mc_message(current_chunk)
+                        current_chunk = ""
+                    
+                    # 拆分长行
+                    for i in range(0, len(line), max_length):
+                        chunk = line[i:i + max_length]
+                        await self._send_single_mc_message(chunk)
+                else:
+                    # 检查添加这行后是否超长
+                    test_chunk = current_chunk + ('\n' if current_chunk else '') + line
+                    if len(test_chunk) > max_length:
+                        # 先发送当前累积的内容
+                        if current_chunk:
+                            await self._send_single_mc_message(current_chunk)
+                        current_chunk = line
+                    else:
+                        current_chunk = test_chunk
+            
+            # 发送剩余内容
+            if current_chunk:
+                await self._send_single_mc_message(current_chunk)
+                
+        except Exception as e:
+            logger.error(f"发送消息到MC聊天框失败: {e}")
+    
+    async def _send_single_mc_message(self, message: str):
+        """
+        发送单条消息到MC聊天框
+        
+        Args:
+            message: 消息内容
+        """
+        try:
+            # 转义JSON特殊字符
+            escaped_message = message.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+            
+            # 使用tellraw命令发送消息给所有玩家
+            json_text = f'{{"text":"[{self.bot_nickname}] {escaped_message}", "color":"aqua"}}'
+            command = f'tellraw @a {json_text}'
+            
+            result = await self.rcon.execute_async(command)
+        except Exception as e:
+            logger.error(f"发送单条消息到MC失败: {e}")
+    
     def is_admin(self, user_id: str) -> bool:
         """
         检查用户是否为管理员
         
         Args:
-            user_id: 用户ID（QQ号）
+            user_id: 用户ID（QQ号或MC玩家ID，格式：mc_player_{玩家名}）
             
         Returns:
             是否为管理员，如果admin_ids为空则所有人都是管理员
         """
+        logger.info(f"权限检查: user_id={user_id}, admin_ids={self.admin_ids}")
         if not self.admin_ids:
             return True
-        return str(user_id) in self.admin_ids
+        
+        # 检查原始ID（QQ号）
+        if str(user_id) in self.admin_ids:
+            return True
+        
+        # 检查MC玩家名（从 mc_player_PlayerName 提取 PlayerName）
+        if user_id.startswith("mc_player_"):
+            player_name = user_id.replace("mc_player_", "")
+            if player_name in self.admin_ids:
+                return True
+        
     
     def _check_permission(self, event: AstrMessageEvent) -> tuple[bool, str]:
         """
@@ -430,3 +632,21 @@ class MCManagerPlugin(Star):
             logger.error(f"RCON连接测试出错: {str(e)}")
         
         yield event.plain_result(result)
+
+    @filter.command("test_log")
+    async def cmd_test_log_connection(self, event: AstrMessageEvent):
+        """测试与日志服务器的连接并读取最新一条日志"""
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            yield event.plain_result(error_msg)
+            return
+        
+        if not self.log_client:
+            yield event.plain_result("日志监控功能未启用")
+            return
+        
+        try:
+            success, log_content = await self.log_client.test_connection()
+            yield event.plain_result(log_content)
+        except Exception as e:
+            yield event.plain_result(f"错误: {e}")

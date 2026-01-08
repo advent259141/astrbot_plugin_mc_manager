@@ -28,5 +28,41 @@
     "title": "启用危险命令",
     "description": "是否启用stop等危险命令",
     "default": false
+  },
+  "enable_log_monitor": {
+    "type": "bool",
+    "title": "启用日志监控",
+    "description": "是否启用Minecraft服务器日志实时监控功能",
+    "default": false
+  },
+  "log_server_host": {
+    "type": "string",
+    "title": "日志服务器地址",
+    "description": "日志服务器的IP地址（运行log_server.py的机器）",
+    "default": "127.0.0.1"
+  },
+  "log_server_port": {
+    "type": "int",
+    "title": "日志服务器端口",
+    "description": "日志服务器监听的端口号",
+    "default": 25576
+  },
+  "wake_words": {
+    "type": "list",
+    "title": "唤醒词列表",
+    "description": "用于唤醒机器人的关键词，可设置多个，匹配任意一个即可唤醒机器人",
+    "default": ["bot"]
+  },
+  "enable_chat_response": {
+    "type": "bool",
+    "title": "启用聊天响应",
+    "description": "是否将LLM的响应发送回MC聊天框（需要启用日志监控）",
+    "default": true
+  },
+  "bot_nickname": {
+    "type": "string",
+    "title": "机器人昵称",
+    "description": "在MC聊天框中显示的机器人名称",
+    "default": "Bot"
   }
 }
