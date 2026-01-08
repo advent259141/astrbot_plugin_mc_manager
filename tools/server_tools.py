@@ -63,6 +63,72 @@ def say_message(message: str) -> str:
     return f"已广播消息: {message}"
 
 
+def tellraw(message: str, sender: str = "Bot", color: str = "yellow", target: str = "@a") -> str:
+    """
+    通过tellraw在游戏公屏发送聊天消息
+
+    Args:
+        message(string): 要发送的消息内容
+        sender(string): 发送者名称，默认为"Bot"
+        color(string): 消息颜色，可选值：yellow/red/green/blue/white/gold/aqua/dark_red等，默认为yellow
+        target(string): 目标玩家，默认@a（所有玩家）
+
+    Returns:
+        执行结果信息
+    """
+    rcon = get_rcon()
+    
+    # 转义消息中的特殊字符
+    message = message.replace('"', '\\"')
+    sender = sender.replace('"', '\\"')
+    
+    # 构建JSON格式的tellraw命令
+    json_text = f'{{"text":"<{sender}> {message}", "color":"{color}"}}'
+    
+    result = rcon.execute(f'tellraw {target} {json_text}')
+    return f"发送消息到 {target}: <{sender}> {message} [{result}]"
+
+
+def title(title_text: str, subtitle_text: str = "", color: str = "white", target: str = "@a", fade_in: int = 10, stay: int = 70, fade_out: int = 20) -> str:
+    """
+    在玩家屏幕中央显示大字
+
+    Args:
+        title_text(string): 标题文本
+        subtitle_text(string): 副标题文本，可选
+        color(string): 标题颜色，可选值：yellow/red/green/blue/white/gold/aqua/dark_red等，默认为white
+        target(string): 目标玩家，默认@a（所有玩家）
+        fade_in(number): 淡入时间（tick），默认10
+        stay(number): 停留时间（tick），默认70
+        fade_out(number): 淡出时间（tick），默认20
+
+    Returns:
+        执行结果信息
+    """
+    rcon = get_rcon()
+    
+    # 转义文本中的特殊字符
+    title_text = title_text.replace('"', '\\"')
+    subtitle_text = subtitle_text.replace('"', '\\"')
+    
+    # 设置显示时间
+    rcon.execute(f'title {target} times {fade_in} {stay} {fade_out}')
+    
+    # 如果有副标题，先设置副标题
+    if subtitle_text:
+        subtitle_json = f'{{"text":"{subtitle_text}", "color":"{color}"}}'
+        rcon.execute(f'title {target} subtitle {subtitle_json}')
+    
+    # 设置标题
+    title_json = f'{{"text":"{title_text}", "color":"{color}"}}'
+    result = rcon.execute(f'title {target} title {title_json}')
+    
+    if subtitle_text:
+        return f"显示标题到 {target}: {title_text} (副标题: {subtitle_text}) [{result}]"
+    else:
+        return f"显示标题到 {target}: {title_text} [{result}]"
+
+
 def stop_server() -> str:
     """
     停止Minecraft服务器（危险操作）

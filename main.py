@@ -282,6 +282,39 @@ class MCManagerPlugin(Star):
             return error_msg
         return await asyncio.to_thread(server_tools.say_message, message)
     
+    @filter.llm_tool(name="tellraw")
+    async def tool_tellraw(self, event: AstrMessageEvent, message: str, sender: str = "Bot", color: str = "yellow", target: str = "@a") -> str:
+        """通过tellraw在游戏公屏发送聊天消息
+        
+        Args:
+            message(string): 要发送的消息内容
+            sender(string): 发送者名称，默认为"Bot"
+            color(string): 消息颜色，可选值：yellow/red/green/blue/white/gold/aqua/dark_red等，默认为yellow
+            target(string): 目标玩家，默认@a（所有玩家）
+        """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
+        return await asyncio.to_thread(server_tools.tellraw, message, sender, color, target)
+    
+    @filter.llm_tool(name="title")
+    async def tool_title(self, event: AstrMessageEvent, title_text: str, subtitle_text: str = "", color: str = "white", target: str = "@a", fade_in: int = 10, stay: int = 70, fade_out: int = 20) -> str:
+        """在玩家屏幕中央显示标题
+        
+        Args:
+            title_text(string): 标题文本
+            subtitle_text(string): 副标题文本，可选
+            color(string): 标题颜色，可选值：yellow/red/green/blue/white/gold/aqua/dark_red等，默认为white
+            target(string): 目标玩家，默认@a（所有玩家）
+            fade_in(number): 淡入时间（tick），默认10
+            stay(number): 停留时间（tick），默认70
+            fade_out(number): 淡出时间（tick），默认20
+        """
+        has_permission, error_msg = self._check_permission(event)
+        if not has_permission:
+            return error_msg
+        return await asyncio.to_thread(server_tools.title, title_text, subtitle_text, color, target, fade_in, stay, fade_out)
+    
     @filter.llm_tool(name="save_world")
     async def tool_save_world(self, event: AstrMessageEvent) -> str:
         """保存世界数据"""
