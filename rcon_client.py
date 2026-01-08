@@ -32,7 +32,8 @@ class MinecraftRCON:
         with self._lock:
             if self._connection is None:
                 try:
-                    self._connection = MCRcon(self.host, self.password, port=self.port)
+                    # 不使用 with 语句，避免 signal 问题
+                    self._connection = MCRcon(self.host, self.password, port=self.port, timeout=10)
                     self._connection.connect()
                     logger.info(f"RCON连接已建立: {self.host}:{self.port}")
                 except Exception as e:
@@ -90,15 +91,23 @@ class MinecraftRCON:
         Returns:
             (是否成功, 消息)
         """
+        mcr = None
         try:
-            # 使用临时连接进行测试，不影响持久连接
-            with MCRcon(self.host, self.password, port=self.port) as mcr:
-                response = mcr.command("list")
-                return True, f"连接成功！{response}"
+            # 使用临时连接进行测试，不使用 with 避免 signal 问题
+            mcr = MCRcon(self.host, self.password, port=self.port, timeout=5)
+            mcr.connect()
+            response = mcr.command("list")
+            return True, f"连接成功！{response}"
         except ConnectionRefusedError:
             return False, f"无法连接到 {self.host}:{self.port}"
         except Exception as e:
             return False, f"连接失败: {str(e)}"
+        finally:
+            if mcr:
+                try:
+                    mcr.disconnect()
+                except:
+                    pass
     
     def close(self):
         """关闭RCON连接"""
