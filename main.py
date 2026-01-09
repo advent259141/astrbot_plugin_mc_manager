@@ -52,6 +52,11 @@ class MCManagerPlugin(Star):
         # 加载机器人昵称配置
         self.bot_nickname = self.config.get("bot_nickname", "Bot")
         
+        # 加载统一上下文配置
+        self.enable_unified_context = self.config.get("enable_unified_context", False)
+        self.unified_group_umo = self.config.get("unified_group_umo", "")
+        self.mc_message_prefix = self.config.get("mc_message_prefix", "[MC]")
+        
         # 初始化日志客户端（如果启用）
         self.log_client = None
         enable_log = self.config.get("enable_log_monitor", False)
@@ -153,9 +158,16 @@ class MCManagerPlugin(Star):
             from astrbot.core.message.components import Plain
             from astrbot.core.platform.astrbot_message import MessageMember
             
-            # 由于 MC 聊天不是原生会话，我们需要自定义参数
-            # 使用固定的 session_id 用于标识 MC 聊天来源
-            mc_session_id = "mc_server_chat"
+            # 如果启用了统一上下文且配置了UMO，从UMO中提取session_id
+            # 否则使用默认的 "mc_server_chat"
+            if self.enable_unified_context and self.unified_group_umo:
+                # UMO格式: platform_id:message_type:session_id
+                parts = self.unified_group_umo.split(":")
+                mc_session_id = parts[2] if len(parts) == 3 else "mc_server_chat"
+                group_id = mc_session_id
+            else:
+                mc_session_id = "mc_server_chat"
+                group_id = "mc_server_chat"
             
             # 使用真实的玩家信息
             sender = MessageMember(
@@ -163,8 +175,8 @@ class MCManagerPlugin(Star):
                 nickname=f"{player}(MC)"  # 显示玩家名和来源
             )
             
-            # 构造消息文本
-            message_text = f"[MC] {message}"
+            # 构造消息文本 - 添加MC前缀用于区分来源
+            message_text = f"{self.mc_message_prefix}-{player} {message}"
             
             # 创建新消息对象
             new_message = await StarTools.create_message(
@@ -174,7 +186,7 @@ class MCManagerPlugin(Star):
                 sender=sender,
                 message=[Plain(message_text)],
                 message_str=message_text,
-                group_id=mc_session_id  # 使用相同的 session_id 作为 group_id
+                group_id=group_id
             )
             
             # 伪造事件并提交
@@ -184,7 +196,7 @@ class MCManagerPlugin(Star):
                 is_wake=True  # 标记为已唤醒
             )
             
-            logger.info(f"已发送伪造事件: [{player}] {message}")
+            logger.info(f"已发送伪造事件到session {mc_session_id}: [{player}] {message}")
             
         except Exception as e:
             logger.error(f"发送伪造事件失败: {e}")
@@ -211,8 +223,9 @@ class MCManagerPlugin(Star):
             return
         
         try:
-            # 检查是否来自MC会话
-            if event.session_id == "mc_server_chat":
+            # 检查是否来自MC会话（不管是否配置了统一上下文）
+            sender_id = event.get_sender_id()
+            if sender_id and sender_id.startswith("mc_player_"):
                 # 获取响应文本
                 response_text = ""
                 if response.result_chain:
@@ -226,6 +239,25 @@ class MCManagerPlugin(Star):
                     await self._send_to_mc_chat(response_text)
         except Exception as e:
             logger.error(f"处理LLM响应时出错: {e}")
+    
+    @filter.on_decorating_result()
+    async def on_decorating_result(self, event: AstrMessageEvent):
+        """
+        装饰结果钩子，用于阻止MC消息的默认回复发送到QQ群
+        
+        当MC玩家发送消息触发LLM时，清空默认回复，避免自动发送到QQ群
+        MC的回复已通过on_llm_response中的_send_to_mc_chat发送
+        
+        Args:
+            event: 消息事件
+        """
+        # 检查是否是MC玩家的消息
+        sender_id = event.get_sender_id()
+        if sender_id and sender_id.startswith("mc_player_"):
+            # 清空消息链，阻止自动发送到QQ群
+            result = event.get_result()
+            if result:
+                result.chain = []
     
     async def _send_to_mc_chat(self, message: str):
         """
@@ -727,6 +759,39 @@ class MCManagerPlugin(Star):
         result += "await set_weather('clear')  # 设置晴天"
         
         return result
+    
+    @filter.llm_tool(name="send_to_qq_group")
+    async def tool_send_to_qq_group(self, event: AstrMessageEvent, message: str) -> str:
+        """向绑定的QQ群发送消息
+        
+        当MC玩家发送消息触发LLM时，LLM的回复默认只会在MC中显示。
+        使用此工具可以将消息同时发送到绑定的QQ群，让QQ群成员也能看到。
+        
+        Args:
+            message(string): 要发送到QQ群的消息内容
+        """
+        # 检查是否启用了统一上下文
+        if not self.enable_unified_context:
+            return "❌ 未启用统一上下文功能(enable_unified_context)，无法发送到QQ群"
+        
+        # 检查是否配置了UMO
+        if not self.unified_group_umo:
+            return "❌ 未配置统一上下文UMO(unified_group_umo)，无法发送到QQ群"
+        
+        try:
+            from astrbot.api.event import MessageChain
+            
+            # 构造消息链
+            message_chain = MessageChain().message(message)
+            
+            # 使用配置的UMO字符串直接发送
+            await self.context.send_message(self.unified_group_umo, message_chain)
+            
+            return f"✓ 已发送到QQ群"
+            
+        except Exception as e:
+            logger.error(f"发送消息到QQ群失败: {e}")
+            return f"❌ 发送到QQ群失败: {str(e)}"
 
     # 工具已通过 @filter.llm_tool 装饰器自动注册到AstrBot
     # 用户直接与LLM对话时，LLM会自动识别并调用这些MC管理工具

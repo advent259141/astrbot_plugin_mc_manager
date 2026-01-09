@@ -64,5 +64,23 @@
     "title": "机器人昵称",
     "description": "在MC聊天框中显示的机器人名称",
     "default": "Bot"
+  },
+  "enable_unified_context": {
+    "type": "bool",
+    "title": "启用统一上下文",
+    "description": "是否启用MC和QQ群的统一上下文功能（需同时配置unified_group_umo）",
+    "default": false
+  },
+  "unified_group_umo": {
+    "type": "string",
+    "title": "统一上下文UMO",
+    "description": "用于send_to_qq_group工具发送消息的完整UMO字符串。格式：平台ID:GroupMessage:群号，示例：aiocqhttp_default:GroupMessage:123456789",
+    "default": ""
+  },
+  "mc_message_prefix": {
+    "type": "string",
+    "title": "MC消息前缀",
+    "description": "MC玩家消息在统一上下文中的前缀标识",
+    "default": "[MC]"
   }
 }
