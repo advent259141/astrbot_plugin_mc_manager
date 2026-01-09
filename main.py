@@ -178,8 +178,9 @@ class MCManagerPlugin(Star):
                 nickname=f"{player}(MC)"  # 显示玩家名和来源
             )
             
-            # 构造消息文本 - 格式: [MC] 玩家名: 消息内容
-            message_text = f"{self.mc_message_prefix} {player}: {message}"
+            # 直接使用原始消息,不添加前缀,保证唤醒词能正常识别
+            # LTM会自动记录发送者昵称,LLM能从对话历史看到是MC玩家
+            message_text = message
             
             # 创建新消息对象
             new_message = await StarTools.create_message(
@@ -217,41 +218,22 @@ class MCManagerPlugin(Star):
     @filter.on_llm_response()
     async def on_llm_response(self, event: AstrMessageEvent, response: LLMResponse):
         """
-        LLM响应后的钩子，用于将响应发送到MC聊天框
+        LLM响应后的钩子 - 已由on_decorating_result统一处理MC消息回复
+        保留此钩子以防未来需要特殊处理LLM响应
         
         Args:
             event: 原始消息事件
             response: LLM的响应
         """
-        # 检查是否启用聊天响应功能
-        if not self.enable_chat_response:
-            return
-        
-        try:
-            # 检查是否来自MC会话（不管是否配置了统一上下文）
-            sender_id = event.get_sender_id()
-            if sender_id and sender_id.startswith("mc_player_"):
-                # 获取响应文本
-                response_text = ""
-                if response.result_chain:
-                    # 从消息链中提取文本
-                    response_text = response.result_chain.get_plain_text()
-                elif response._completion_text:
-                    response_text = response._completion_text
-                
-                if response_text:
-                    # 发送到MC服务器聊天框
-                    await self._send_to_mc_chat(response_text)
-        except Exception as e:
-            logger.error(f"处理LLM响应时出错: {e}")
+        pass
     
     @filter.on_decorating_result()
     async def on_decorating_result(self, event: AstrMessageEvent):
         """
-        装饰结果钩子，用于阻止MC消息的默认回复发送到QQ群
+        装饰结果钩子,用于拦截MC消息的所有回复并发送到MC聊天框
         
-        当MC玩家发送消息触发LLM时，清空默认回复，避免自动发送到QQ群
-        MC的回复已通过on_llm_response中的_send_to_mc_chat发送
+        - QQ群消息:不处理,保持默认行为(发送到QQ群)
+        - MC消息:提取回复内容,发送到MC聊天框,清空chain阻止发送到QQ群
         
         Args:
             event: 消息事件
@@ -259,9 +241,22 @@ class MCManagerPlugin(Star):
         # 检查是否是MC玩家的消息
         sender_id = event.get_sender_id()
         if sender_id and sender_id.startswith("mc_player_"):
-            # 清空消息链，阻止自动发送到QQ群
+            # 获取回复内容
             result = event.get_result()
-            if result:
+            if result and result.chain:
+                # 提取纯文本内容
+                try:
+                    from astrbot.core.message.message_event_result import MessageChain
+                    message_chain = MessageChain(result.chain)
+                    response_text = message_chain.get_plain_text()
+                    
+                    if response_text and self.enable_chat_response:
+                        # 发送到MC聊天框
+                        await self._send_to_mc_chat(response_text)
+                except Exception as e:
+                    logger.error(f"提取MC回复内容失败: {e}")
+                
+                # 清空消息链,阻止发送到QQ群
                 result.chain = []
     
     async def _send_to_mc_chat(self, message: str):
