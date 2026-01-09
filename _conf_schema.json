@@ -47,16 +47,10 @@
     "description": "日志服务器监听的端口号",
     "default": 25576
   },
-  "wake_words": {
-    "type": "list",
-    "title": "唤醒词列表",
-    "description": "用于唤醒机器人的关键词，可设置多个，匹配任意一个即可唤醒机器人",
-    "default": ["bot"]
-  },
   "enable_chat_response": {
     "type": "bool",
     "title": "启用聊天响应",
-    "description": "是否将LLM的响应发送回MC聊天框（需要启用日志监控）",
+    "description": "是否将LLM的响应发送回MC聊天框（需要启用日志监控）。注意：所有MC消息会提交到AstrBot框架，由AstrBot的wake_prefix配置控制是否调用LLM",
     "default": true
   },
   "bot_nickname": {

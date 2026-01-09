@@ -18,14 +18,13 @@ class LogClient:
         r'<(?P<player>[^>]+)>\s+(?P<message>.*)'
     )
     
-    def __init__(self, host: str = "127.0.0.1", port: int = 25576, wake_words: List[str] = None):
+    def __init__(self, host: str = "127.0.0.1", port: int = 25576):
         """
         初始化日志客户端
         
         Args:
             host: 服务器地址
             port: 服务器端口
-            wake_words: 唤醒词列表，用于触发伪造事件
         """
         self.host = host
         self.port = port
@@ -33,7 +32,6 @@ class LogClient:
         self.writer: Optional[asyncio.StreamWriter] = None
         self.running = False
         self.on_chat_message: Optional[Callable] = None
-        self.wake_words = wake_words or []
         self.original_event = None  # 存储原始事件，用于伪造事件
         self.fake_event_handler: Optional[Callable] = None  # 伪造事件处理器
     
@@ -96,18 +94,17 @@ class LogClient:
             player = match.group('player')
             message = match.group('message')
             
-            # 检查是否包含唤醒词
-            if self._contains_wake_word(message):
-                logger.info(f"[MC] <{player}> {message}")
-                # 如果设置了伪造事件处理器，调用它
-                if self.fake_event_handler:
-                    try:
-                        # 传入玩家名和消息
-                        asyncio.create_task(
-                            self.fake_event_handler(player, message)
-                        )
-                    except Exception as e:
-                        logger.error(f"触发伪造事件时出错: {e}")
+            logger.info(f"[MC] <{player}> {message}")
+            
+            # 提交所有MC消息到AstrBot，由框架的wake_prefix控制是否调用LLM
+            if self.fake_event_handler:
+                try:
+                    # 传入玩家名和消息
+                    asyncio.create_task(
+                        self.fake_event_handler(player, message)
+                    )
+                except Exception as e:
+                    logger.error(f"提交MC消息时出错: {e}")
             
             # 如果设置了回调函数，调用它
             if self.on_chat_message:
@@ -144,25 +141,6 @@ class LogClient:
             handler: 处理器函数，签名为 async def handler(message_text: str)
         """
         self.fake_event_handler = handler
-    
-    def _contains_wake_word(self, message: str) -> bool:
-        """
-        检查消息是否包含唤醒词
-        
-        Args:
-            message: 消息内容
-            
-        Returns:
-            是否包含任一唤醒词
-        """
-        if not self.wake_words:
-            return False
-        
-        message_lower = message.lower()
-        for wake_word in self.wake_words:
-            if wake_word.lower() in message_lower:
-                return True
-        return False
     
     async def test_connection(self):
         """

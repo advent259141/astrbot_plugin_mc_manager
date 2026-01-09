@@ -43,8 +43,8 @@ class MCManagerPlugin(Star):
         # 是否启用危险命令
         self.enable_dangerous = self.config.get("enable_dangerous_commands", False)
         
-        # 加载唤醒词配置
-        self.wake_words = self.config.get("wake_words", ["bot"])
+        # 唤醒词配置已移除 - 所有消息都提交，由AstrBot框架层唤醒词决定是否调用LLM
+        # 旧配置: self.wake_words = self.config.get("wake_words", ["bot"])
         
         # 是否启用聊天响应
         self.enable_chat_response = self.config.get("enable_chat_response", True)
@@ -63,7 +63,8 @@ class MCManagerPlugin(Star):
         if enable_log:
             log_host = self.config.get("log_server_host", "127.0.0.1")
             log_port = self.config.get("log_server_port", 25576)
-            self.log_client = LogClient(log_host, log_port, wake_words=self.wake_words)
+            # 所有MC消息都会提交到AstrBot，由框架的wake_prefix控制是否调用LLM
+            self.log_client = LogClient(log_host, log_port)
             self.log_client.set_chat_callback(self._on_player_chat)
             self.log_client.set_fake_event_handler(self._send_fake_event)
         
@@ -147,7 +148,9 @@ class MCManagerPlugin(Star):
     
     async def _send_fake_event(self, player: str, message: str):
         """
-        伪造一个消息事件并发送到EventBus
+        提交所有MC消息到AstrBot
+        - LTM会记录所有消息作为上下文
+        - 只有包含AstrBot配置的唤醒词的消息才会触发LLM
         
         Args:
             player: 玩家名称
@@ -175,12 +178,12 @@ class MCManagerPlugin(Star):
                 nickname=f"{player}(MC)"  # 显示玩家名和来源
             )
             
-            # 构造消息文本 - 添加MC前缀用于区分来源
-            message_text = f"{self.mc_message_prefix}-{player} {message}"
+            # 构造消息文本 - 格式: [MC] 玩家名: 消息内容
+            message_text = f"{self.mc_message_prefix} {player}: {message}"
             
             # 创建新消息对象
             new_message = await StarTools.create_message(
-                type="GroupMessage",  # 使用正确的枚举值
+                type="GroupMessage",
                 self_id="astrbot_mc_plugin",
                 session_id=mc_session_id,
                 sender=sender,
@@ -189,17 +192,19 @@ class MCManagerPlugin(Star):
                 group_id=group_id
             )
             
-            # 伪造事件并提交
+            # 提交事件到AstrBot
+            # - is_wake=True 确保LTM会处理（记录消息）
+            # - 是否真正调用LLM由AstrBot框架的唤醒词配置决定
             await StarTools.create_event(
                 abm=new_message,
-                platform="aiocqhttp",  # 使用支持的平台名称
-                is_wake=True  # 标记为已唤醒
+                platform="aiocqhttp",
+                is_wake=True
             )
             
-            logger.info(f"已发送伪造事件到session {mc_session_id}: [{player}] {message}")
+            logger.info(f"MC消息已提交: [{player}] {message}")
             
         except Exception as e:
-            logger.error(f"发送伪造事件失败: {e}")
+            logger.error(f"提交MC消息失败: {e}")
     
     
     async def terminate(self):

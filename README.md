@@ -52,7 +52,6 @@ broadcast-rcon-to-ops=true
 | `enable_log_monitor` | 启用MC日志监控 | `false` |
 | `log_server_host` | 日志服务器地址 | `127.0.0.1` |
 | `log_server_port` | 日志服务器端口 | `25576` |
-| `wake_words` | 唤醒词列表 | `["bot"]` |
 | `enable_chat_response` | 将LLM响应发送回MC聊天框 | `true` |
 | `bot_nickname` | 在MC中显示的机器人昵称 | `"Bot"` |
 
@@ -67,7 +66,6 @@ broadcast-rcon-to-ops=true
   "enable_log_monitor": true,
   "log_server_host": "127.0.0.1",
   "log_server_port": 25576,
-  "wake_words": ["小助手", "bot"],
   "enable_chat_response": true,
   "bot_nickname": "MC助手"
 }
@@ -88,8 +86,10 @@ broadcast-rcon-to-ops=true
    - 格式：MC玩家的user_id为 `mc_player_{玩家名}`
 
 3. **在MC中使用**：
-   - 发送包含唤醒词的消息：`小助手 查看在线玩家`
-   - 机器人会自动回复到MC聊天框
+   - 所有MC聊天消息都会提交到AstrBot，LLM会看到完整的聊天上下文
+   - 唤醒词在AstrBot的 `wake_prefix` 配置中统一管理（如 `"wake_prefix": ["小面包"]`）
+   - 只有包含唤醒词的消息才会触发LLM回复
+   - 示例：发送 `小面包 查看在线玩家`，机器人会自动回复到MC聊天框
 
 **权限校验说明**：
 - QQ消息：使用QQ号校验（如 `"123456789"`）
