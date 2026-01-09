@@ -194,12 +194,12 @@ class MCManagerPlugin(Star):
             )
             
             # 提交事件到AstrBot
-            # - is_wake=True 确保LTM会处理（记录消息）
-            # - 是否真正调用LLM由AstrBot框架的唤醒词配置决定
+            # - is_wake=False 让框架根据唤醒词配置决定是否调用LLM
+            # - LTM仍然会记录所有消息作为上下文
             await StarTools.create_event(
                 abm=new_message,
                 platform="aiocqhttp",
-                is_wake=True
+                is_wake=False
             )
             
             logger.info(f"MC消息已提交: [{player}] {message}")
@@ -230,10 +230,9 @@ class MCManagerPlugin(Star):
     @filter.on_decorating_result()
     async def on_decorating_result(self, event: AstrMessageEvent):
         """
-        装饰结果钩子,用于拦截MC消息的所有回复并发送到MC聊天框
-        
-        - QQ群消息:不处理,保持默认行为(发送到QQ群)
-        - MC消息:提取回复内容,发送到MC聊天框,清空chain阻止发送到QQ群
+        装饰结果钩子,用于:
+        1. 检测MC消息是否匹配了指令,如果是则标记为已发送以跳过LLM
+        2. 拦截MC消息的所有回复并发送到MC聊天框
         
         Args:
             event: 消息事件
@@ -241,6 +240,16 @@ class MCManagerPlugin(Star):
         # 检查是否是MC玩家的消息
         sender_id = event.get_sender_id()
         if sender_id and sender_id.startswith("mc_player_"):
+            # 检查是否有其他插件的handler被激活(表示匹配了指令)
+            activated_handlers = event.get_extra("activated_handlers", default=[])
+            for handler in activated_handlers:
+                # 排除本插件的handler
+                if not handler.handler_module_path.startswith("astrbot_plugin_mc_manager"):
+                    logger.info(f"MC消息匹配了指令 {handler.handler_full_name}，标记为已发送操作以跳过LLM")
+                    # 标记为已有发送操作，让process_stage跳过LLM调用
+                    event._has_send_oper = True
+                    break
+            
             # 获取回复内容
             result = event.get_result()
             if result and result.chain:
