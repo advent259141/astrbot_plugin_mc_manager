@@ -47,6 +47,18 @@
     "description": "日志服务器监听的端口号",
     "default": 25576
   },
+  "log_reconnect_interval": {
+    "type": "int",
+    "title": "日志服务器重连间隔",
+    "description": "与日志服务器断开连接后，自动重连的时间间隔（秒），设为0禁用自动重连",
+    "default": 10
+  },
+  "log_max_reconnect_attempts": {
+    "type": "int",
+    "title": "最大重连次数",
+    "description": "自动重连的最大尝试次数，设为0表示无限重试",
+    "default": 0
+  },
   "enable_chat_response": {
     "type": "bool",
     "title": "启用聊天响应",

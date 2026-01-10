@@ -63,10 +63,20 @@ class MCManagerPlugin(Star):
         if enable_log:
             log_host = self.config.get("log_server_host", "127.0.0.1")
             log_port = self.config.get("log_server_port", 25576)
+            reconnect_interval = self.config.get("log_reconnect_interval", 10)
+            max_reconnect_attempts = self.config.get("log_max_reconnect_attempts", 0)
+            
             # 所有MC消息都会提交到AstrBot，由框架的wake_prefix控制是否调用LLM
-            self.log_client = LogClient(log_host, log_port)
+            self.log_client = LogClient(
+                log_host,
+                log_port,
+                reconnect_interval=reconnect_interval,
+                max_reconnect_attempts=max_reconnect_attempts
+            )
             self.log_client.set_chat_callback(self._on_player_chat)
             self.log_client.set_fake_event_handler(self._send_fake_event)
+            self.log_client.set_disconnect_callback(self._on_log_disconnect)
+            self.log_client.set_reconnect_callback(self._on_log_reconnect)
         
         # 初始化脚本执行器
         self.script_executor = ScriptExecutor()
@@ -81,13 +91,10 @@ class MCManagerPlugin(Star):
     
     async def initialize(self):
         """插件激活时自动调用 - 启动长连接任务"""
-        # 启动日志客户端
+        # 启动日志客户端（包含自动重连功能）
         if self.log_client:
-            if await self.log_client.connect():
-                asyncio.create_task(self.log_client.start_listening())
-                logger.info("日志监控已启动")
-            else:
-                logger.error("日志监控启动失败：无法连接到日志服务器")
+            asyncio.create_task(self.log_client.start_listening())
+            logger.info("日志监控已启动（支持自动重连）")
     
     def _inject_rcon(self):
         """将RCON客户端注入到所有工具模块"""
@@ -145,6 +152,14 @@ class MCManagerPlugin(Star):
             time: 消息时间
         """
         pass
+    
+    async def _on_log_disconnect(self):
+        """日志服务器断连回调"""
+        logger.warning("与日志服务器的连接已断开")
+    
+    async def _on_log_reconnect(self):
+        """日志服务器重连成功回调"""
+        logger.info("已重新连接到日志服务器")
     
     async def _send_fake_event(self, player: str, message: str):
         """
@@ -210,9 +225,9 @@ class MCManagerPlugin(Star):
     
     async def terminate(self):
         """插件禁用/重载时自动调用 - 清理资源"""
-        # 断开日志客户端
+        # 断开日志客户端（停止自动重连）
         if self.log_client:
-            await self.log_client.disconnect()
+            await self.log_client.disconnect(stop_reconnect=True)
             logger.info("日志监控已停止")
     
     @filter.on_llm_response()
