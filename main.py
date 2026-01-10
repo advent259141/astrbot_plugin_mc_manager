@@ -386,9 +386,15 @@ class MCManagerPlugin(Star):
                     message_chain = MessageChain(result.chain)
                     response_text = message_chain.get_plain_text()
                     
+                    # 过滤掉Agent多轮调用时的中间响应
+                    # *No response* 是Agent在工具调用过程中的占位符，不应该发送到MC
                     if response_text and self.enable_chat_response:
-                        # 发送到MC聊天框
-                        await self._send_to_mc_chat(response_text)
+                        # 检查是否是无效响应
+                        if response_text.strip() not in ["*No response*", ""]:
+                            # 发送到MC聊天框
+                            await self._send_to_mc_chat(response_text)
+                        else:
+                            logger.debug(f"过滤掉中间响应: {response_text}")
                 except Exception as e:
                     logger.error(f"提取MC回复内容失败: {e}")
                 
