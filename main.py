@@ -77,6 +77,10 @@ class MCManagerPlugin(Star):
             self.log_client.set_fake_event_handler(self._send_fake_event)
             self.log_client.set_disconnect_callback(self._on_log_disconnect)
             self.log_client.set_reconnect_callback(self._on_log_reconnect)
+            self.log_client.set_player_join_callback(self._on_player_join)
+            self.log_client.set_player_leave_callback(self._on_player_leave)
+            self.log_client.set_player_advancement_callback(self._on_player_advancement)
+            self.log_client.set_player_death_callback(self._on_player_death)
         
         # 初始化脚本执行器
         self.script_executor = ScriptExecutor()
@@ -161,6 +165,60 @@ class MCManagerPlugin(Star):
         """日志服务器重连成功回调"""
         logger.info("已重新连接到日志服务器")
     
+    async def _on_player_join(self, player: str):
+        """
+        玩家登入事件回调
+        
+        Args:
+            player: 玩家名称
+        """
+        logger.info(f"[MC事件] 玩家 {player} 加入了游戏")
+        
+        # 伪造事件提交到AstrBot，让LLM感知到登入事件
+        event_message = f"[系统消息] {player} 加入了游戏"
+        await self._send_system_event(player, event_message)
+    
+    async def _on_player_leave(self, player: str):
+        """
+        玩家登出事件回调
+        
+        Args:
+            player: 玩家名称
+        """
+        logger.info(f"[MC事件] 玩家 {player} 离开了游戏")
+        
+        # 伪造事件提交到AstrBot
+        event_message = f"[系统消息] {player} 离开了游戏"
+        await self._send_system_event(player, event_message)
+    
+    async def _on_player_advancement(self, player: str, advancement: str):
+        """
+        玩家达成成就事件回调
+        
+        Args:
+            player: 玩家名称
+            advancement: 成就名称
+        """
+        logger.info(f"[MC事件] 玩家 {player} 达成了成就 [{advancement}]")
+        
+        # 伪造事件提交到AstrBot
+        event_message = f"[系统消息] {player} 达成了成就 [{advancement}]"
+        await self._send_system_event(player, event_message)
+    
+    async def _on_player_death(self, player: str, reason: str):
+        """
+        玩家死亡事件回调
+        
+        Args:
+            player: 玩家名称
+            reason: 死因描述
+        """
+        logger.info(f"[MC事件] 玩家死亡: {reason}")
+        
+        # 伪造事件提交到AstrBot
+        event_message = f"[系统消息] {reason}"
+        await self._send_system_event(player, event_message)
+    
     async def _send_fake_event(self, player: str, message: str):
         """
         提交所有MC消息到AstrBot
@@ -221,6 +279,60 @@ class MCManagerPlugin(Star):
             
         except Exception as e:
             logger.error(f"提交MC消息失败: {e}")
+    
+    async def _send_system_event(self, player: str, event_message: str):
+        """
+        伪造MC系统事件提交到AstrBot
+        - 用于上报登入、登出、成就、死亡等系统事件
+        - LTM会记录所有事件作为上下文
+        - 系统事件默认不会触发LLM，但LLM能在对话历史中看到
+        
+        Args:
+            player: 相关玩家名称
+            event_message: 事件消息内容
+        """
+        try:
+            from astrbot.core.star.star_tools import StarTools
+            from astrbot.core.message.components import Plain
+            from astrbot.core.platform.astrbot_message import MessageMember
+            
+            # 使用相同的session_id确保上下文连续
+            if self.enable_unified_context and self.unified_group_umo:
+                parts = self.unified_group_umo.split(":")
+                mc_session_id = parts[2] if len(parts) == 3 else "mc_server_chat"
+                group_id = mc_session_id
+            else:
+                mc_session_id = "mc_server_chat"
+                group_id = "mc_server_chat"
+            
+            # 系统消息使用特殊的sender标识
+            sender = MessageMember(
+                user_id="mc_system",  # 系统消息ID
+                nickname="MC服务器"  # 显示为服务器
+            )
+            
+            # 创建系统消息对象
+            new_message = await StarTools.create_message(
+                type="GroupMessage",
+                self_id="astrbot_mc_plugin",
+                session_id=mc_session_id,
+                sender=sender,
+                message=[Plain(event_message)],
+                message_str=event_message,
+                group_id=group_id
+            )
+            
+            # 提交事件到AstrBot（不触发唤醒，但会记录到LTM）
+            await StarTools.create_event(
+                abm=new_message,
+                platform="aiocqhttp",
+                is_wake=False
+            )
+            
+            logger.info(f"MC系统事件已提交: {event_message}")
+            
+        except Exception as e:
+            logger.error(f"提交MC系统事件失败: {e}")
     
     
     async def terminate(self):

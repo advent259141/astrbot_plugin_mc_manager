@@ -21,6 +21,46 @@ class LogClient:
         r'<(?P<player>[^>]+)>\s+(?P<message>.*)'
     )
     
+    # 玩家登入事件正则
+    JOIN_PATTERN = re.compile(
+        r'\[Server thread/INFO\]: (\S+) joined the game$'
+    )
+    
+    # 玩家登出事件正则
+    LEAVE_PATTERN = re.compile(
+        r'\[Server thread/INFO\]: (\S+) left the game$'
+    )
+    
+    # 达成成就事件正则
+    ADVANCEMENT_PATTERN = re.compile(
+        r'\[Server thread/INFO\]: (\S+) has made the advancement \[(.+)\]$'
+    )
+    
+    # 死亡事件关键词列表
+    DEATH_KEYWORDS = [
+        "was slain by",       # 被杀 (玩家/僵尸)
+        "was shot by",        # 被射杀 (骷髅)
+        "fell from",          # 摔死
+        "drowned",            # 淹死
+        "suffocated in",      # 窒息/卡墙
+        "tried to swim in",   # 岩浆
+        "was blown up by",    # 苦力怕/TNT
+        "hit the ground",     # 摔死(着陆过猛)
+        "withered away",      # 凋零
+        "went up in flames",  # 烧死
+        "burned to death",    # 烧死
+        "was killed",         # 被杀
+        "was pummeled by",    # 被打死
+        "starved to death",   # 饿死
+        "was pricked to death", # 被仙人掌扎死
+        "was impaled",        # 被三叉戟刺死
+        "experienced kinetic energy", # 动能伤害(鞘翅)
+        "blew up",            # 爆炸
+        "was squashed",       # 被压扁
+        "fell out of",        # 掉出世界
+        "died",               # 通用死亡
+    ]
+    
     # 心跳配置
     HEARTBEAT_TIMEOUT = 30  # 心跳超时时间（秒），超过此时间未收到服务端心跳则认为断连
     
@@ -43,6 +83,10 @@ class LogClient:
         self.on_chat_message: Optional[Callable] = None
         self.on_disconnect: Optional[Callable] = None  # 断连回调
         self.on_reconnect: Optional[Callable] = None  # 重连成功回调
+        self.on_player_join: Optional[Callable] = None  # 玩家登入回调
+        self.on_player_leave: Optional[Callable] = None  # 玩家登出回调
+        self.on_player_advancement: Optional[Callable] = None  # 玩家成就回调
+        self.on_player_death: Optional[Callable] = None  # 玩家死亡回调
         self.original_event = None  # 存储原始事件，用于伪造事件
         self.fake_event_handler: Optional[Callable] = None  # 伪造事件处理器
         self.last_heartbeat_time = 0  # 最后收到心跳的时间
@@ -234,18 +278,67 @@ class LogClient:
     
     def _process_log_line(self, log_line: str):
         """
-        处理日志行，提取玩家聊天消息
+        处理日志行，提取各种游戏事件
         
         Args:
             log_line: 日志行内容
         """
-        # 尝试匹配聊天消息格式
+        # 1. 检查玩家登入事件
+        match_join = self.JOIN_PATTERN.search(log_line)
+        if match_join:
+            player = match_join.group(1)
+            logger.info(f"[MC事件] {player} 加入了游戏")
+            if self.on_player_join:
+                try:
+                    asyncio.create_task(self.on_player_join(player))
+                except Exception as e:
+                    logger.error(f"处理玩家登入回调时出错: {e}")
+            return
+        
+        # 2. 检查玩家登出事件
+        match_leave = self.LEAVE_PATTERN.search(log_line)
+        if match_leave:
+            player = match_leave.group(1)
+            logger.info(f"[MC事件] {player} 离开了游戏")
+            if self.on_player_leave:
+                try:
+                    asyncio.create_task(self.on_player_leave(player))
+                except Exception as e:
+                    logger.error(f"处理玩家登出回调时出错: {e}")
+            return
+        
+        # 3. 检查达成成就事件
+        match_adv = self.ADVANCEMENT_PATTERN.search(log_line)
+        if match_adv:
+            player = match_adv.group(1)
+            advancement = match_adv.group(2)
+            logger.info(f"[MC事件] {player} 达成了成就 [{advancement}]")
+            if self.on_player_advancement:
+                try:
+                    asyncio.create_task(self.on_player_advancement(player, advancement))
+                except Exception as e:
+                    logger.error(f"处理成就回调时出错: {e}")
+            return
+        
+        # 4. 检查死亡事件
+        death_info = self._parse_death_event(log_line)
+        if death_info:
+            player, reason = death_info
+            logger.info(f"[MC事件] {player} 死亡: {reason}")
+            if self.on_player_death:
+                try:
+                    asyncio.create_task(self.on_player_death(player, reason))
+                except Exception as e:
+                    logger.error(f"处理死亡回调时出错: {e}")
+            return
+        
+        # 5. 检查玩家聊天消息
         match = self.CHAT_PATTERN.search(log_line)
         if match:
             player = match.group('player')
             message = match.group('message')
             
-            logger.info(f"[MC] <{player}> {message}")
+            logger.info(f"[MC聊天] <{player}> {message}")
             
             # 提交所有MC消息到AstrBot，由框架的wake_prefix控制是否调用LLM
             if self.fake_event_handler:
@@ -265,6 +358,45 @@ class LogClient:
                     )
                 except Exception as e:
                     logger.error(f"处理聊天消息回调时出错: {e}")
+    
+    def _parse_death_event(self, log_line: str) -> Optional[tuple[str, str]]:
+        """
+        解析死亡事件
+        
+        Args:
+            log_line: 日志行内容
+            
+        Returns:
+            (玩家名, 死因) 或 None
+        """
+        # 必须包含 [Server thread/INFO]:
+        if "[Server thread/INFO]:" not in log_line:
+            return None
+        
+        try:
+            # 提取日志内容部分
+            content = log_line.split("[Server thread/INFO]: ")[1].strip()
+            
+            # 排除玩家聊天 (聊天信息以 <玩家名> 开头)
+            if content.startswith("<"):
+                return None
+            
+            # 排除其他系统信息
+            if any(keyword in content for keyword in ["logged in", "lost connection", "joined the game", "left the game"]):
+                return None
+            
+            # 检查是否包含死亡关键词
+            for keyword in self.DEATH_KEYWORDS:
+                if keyword in content:
+                    # 提取玩家名（通常是句子第一个词）
+                    parts = content.split(" ")
+                    if parts:
+                        player_name = parts[0]
+                        return (player_name, content)
+            
+            return None
+        except Exception:
+            return None
     
     def set_chat_callback(self, callback: Callable):
         """
@@ -292,6 +424,42 @@ class LogClient:
             callback: 回调函数，签名为 async def callback()
         """
         self.on_reconnect = callback
+    
+    def set_player_join_callback(self, callback: Callable):
+        """
+        设置玩家登入回调函数
+        
+        Args:
+            callback: 回调函数，签名为 async def callback(player: str)
+        """
+        self.on_player_join = callback
+    
+    def set_player_leave_callback(self, callback: Callable):
+        """
+        设置玩家登出回调函数
+        
+        Args:
+            callback: 回调函数，签名为 async def callback(player: str)
+        """
+        self.on_player_leave = callback
+    
+    def set_player_advancement_callback(self, callback: Callable):
+        """
+        设置玩家达成成就回调函数
+        
+        Args:
+            callback: 回调函数，签名为 async def callback(player: str, advancement: str)
+        """
+        self.on_player_advancement = callback
+    
+    def set_player_death_callback(self, callback: Callable):
+        """
+        设置玩家死亡回调函数
+        
+        Args:
+            callback: 回调函数，签名为 async def callback(player: str, reason: str)
+        """
+        self.on_player_death = callback
     
     def set_original_event(self, event):
         """
